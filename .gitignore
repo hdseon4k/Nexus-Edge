@@ -3,3 +3,14 @@
 *.onnx
 configs/*.yaml
 !configs/settings.yaml.sample
+
+# AI Agent & Editor Traces
+.cursorrules
+.cursor/
+.agents/
+.agent/
+_agents/
+_agent/
+.gemini/
+.aichat/
+docs/*_ki.md
