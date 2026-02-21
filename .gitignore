@@ -1,0 +1,5 @@
+# Nexus-Edge Specific
+*.pt
+*.onnx
+configs/*.yaml
+!configs/settings.yaml.sample
