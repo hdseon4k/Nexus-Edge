@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus-Edge | Industrial Barcode Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00f2fe;
+            --secondary: #4facfe;
+            --bg: #0a0e17;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+            background: radial-gradient(circle at top right, #1a2a4a, var(--bg));
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 600;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            background: rgba(0, 255, 0, 0.1);
+            color: #00ff88;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(0, 255, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #00ff88;
+            animation: pulse 1.5s infinite;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .video-container {
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #000;
+            aspect-ratio: 16 / 9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        #video_feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .log-container {
+            height: 400px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .log-entry {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1rem;
+            border-left: 3px solid var(--secondary);
+            animation: slideInLeft 0.3s ease-out;
+        }
+
+        .log-time {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 0.3rem;
+        }
+
+        .log-data {
+            font-family: monospace;
+            font-size: 1rem;
+            color: #fff;
+        }
+
+        .engine-tag {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-left: 0.5rem;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--glass-border);
+            border-radius: 10px;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">Nexus-Edge AI</div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                SYSTEM LIVE
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Main Video Feed -->
+            <div class="glass-card">
+                <div class="metric-label">Real-time Inference Stream</div>
+                <div class="video-container">
+                    <img id="video_feed" src="http://localhost:5000/video_feed" alt="Video Feed">
+                </div>
+                <div style="margin-top: 1.5rem; display: flex; gap: 2rem;">
+                    <div>
+                        <div class="metric-label">Latency</div>
+                        <div class="metric-value" id="latency">- ms</div>
+                    </div>
+                    <div>
+                        <div class="metric-label">Active Engines</div>
+                        <div class="metric-value">YOLOv11 + ZBar + ZXing</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Result Sidebar -->
+            <div class="sidebar">
+                <div class="glass-card" style="flex: 1;">
+                    <div class="metric-label">Scan History</div>
+                    <div class="log-container" id="history">
+                        <div class="log-entry" style="border-left-color: rgba(255,255,255,0.2);">
+                            <div class="log-data" style="color: rgba(255,255,255,0.4);">Waiting for detections...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const historyContainer = document.getElementById('history');
+        const latencyDisplay = document.getElementById('latency');
+        let lastCodes = new Set();
+
+        function updateDetections() {
+            fetch('http://localhost:5000/detections')
+                .then(response => response.json())
+                .then(detections => {
+                    if (detections.length > 0) {
+                        const latency = (detections[0].inference_time * 1000).toFixed(1);
+                        latencyDisplay.innerText = `${latency} ms`;
+
+                        detections.forEach(det => {
+                            if (det.decoded && !lastCodes.has(det.decoded.data)) {
+                                addLog(det.decoded);
+                                lastCodes.add(det.decoded.data);
+                                // Keep memory clean
+                                if (lastCodes.size > 50) lastCodes.clear();
+                            }
+                        });
+                    }
+                })
+                .catch(err => console.error("Fetch error:", err));
+        }
+
+        function addLog(decoded) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `
+                <div class="log-time">${time}</div>
+                <div class="log-data">
+                    ${decoded.data}
+                    <span class="engine-tag">${decoded.engine}/${decoded.method}</span>
+                </div>
+            `;
+            historyContainer.prepend(entry);
+            
+            // Limit shown logs
+            if (historyContainer.children.length > 10) {
+                historyContainer.removeChild(historyContainer.lastChild);
+            }
+        }
+
+        // Poll for updates every 500ms
+        setInterval(updateDetections, 500);
+    </script>
+</body>
+</html>
