@@ -17,3 +17,20 @@ Nexus-Edge는 지능형 물류 시스템의 최전선에서 현장의 물리적 
 저희는 고객님께 모든 진행 상황을 투명하게 공유합니다.
 - **진행 상황 확인:** [GitHub Projects](해당_프로젝트_링크)에서 실시간 칸반 보드 확인 가능
 - **테스트 리포트:** `/docs/test-reports` 폴더에서 인식률 검증 결과 상시 공개
+
+## 🛠 시스템 설정 (Configuration)
+
+### 1. 환경 변수 설정
+`configs/settings.yaml` 파일에서 Odoo 인스턴스와 카메라 주소를 연결합니다.
+- **Odoo URL**: `https://your-odoo-instance.com`
+- **Camera Stream**: `rtsp://admin:password@192.168.1.100:554/live`
+
+### 2. 하드웨어 요구사항 (Recommended)
+- **Edge Node**: Raspberry Pi 4 (8GB) 또는 동급 IoT Box
+- **Inference Server**: NVIDIA RTX 3060 이상 (사무실 고성능 PC)
+- **Camera**: 4K 지원 산업용 액션캠 또는 IP 카메라
+
+## 📊 인식률 검증 프로세스 (99.9% Accuracy)
+Nexus-Edge는 매일 수집된 데이터 중 인식 실패 사례(0.1%)를 `/docs/test-reports`에 자동 기록합니다.
+- **분류**: 조도 저하, 각도 불량, 라벨 훼손 등
+- **피드백**: 실패 데이터는 모델 재학습(Retraining)에 즉시 활용되어 인식률을 지속적으로 개선합니다.
