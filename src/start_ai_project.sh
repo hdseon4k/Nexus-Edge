@@ -47,16 +47,17 @@ pm2 start mcp-server-memory --name "$PM2_NAME" -- --path "$(pwd)/$MEMORY_FILE"
 # 새 세션 생성 (데몬 모드)
 tmux new-session -d -s "$SESSION" -n "DevWorkspace"
 
-# 2x2 그리드 생성
+# 2x2 그리드 생성 (안정성을 위해 -d 옵션 사용)
 # .0 (Top) & .1 (Bottom)
-tmux split-window -v -t "$SESSION:0"
+tmux split-window -v -d -t "$SESSION:0"
 # .0 (Top-Left) & .1 (Top-Right)
-tmux split-window -h -t "$SESSION:0.0"
+tmux split-window -h -d -t "$SESSION:0.0"
 # .2 (Bottom-Left) & .3 (Bottom-Right)
-tmux split-window -h -t "$SESSION:0.2"
+tmux split-window -h -d -t "$SESSION:0.2"
 
-# 레이아웃 균형 조정
+# 레이아웃 균형 조정 및 패널 준비 대기
 tmux select-layout -t "$SESSION:0" tiled
+sleep 1
 
 # 외관 설정 (Role 표시 최적화)
 tmux set-option -t "$SESSION" pane-border-status top
@@ -69,20 +70,20 @@ tmux set-option -t "$SESSION" pane-border-format \
 # 4. 에이전트 실행 (역할별 최적화)
 # =================================================================
 
-# 헬퍼 함수: Gemini 실행
-# -i (interactive) 옵션을 사용하여 초기 프롬프트 실행 후 대기 모드 진입
-# $PROJECT_NAME 변수 확장을 위해 double quotes 사용
-# 환경 변수 로드를 위해 source ~/.bashrc 포함
+# 헬퍼 함수: Gemini 실행 (중복 실행 방지를 위해 clear 추가 및 대기 처리)
 run_agent() {
     local pane_idx=$1
     local model=$2
     local role=$3
     local prompt="You are a $role for project [$PROJECT_NAME]. Please help me with the development process."
     
-    # gemini 명령어 실행
-    tmux send-keys -t "$SESSION:0.$pane_idx" "source ~/.bashrc && gemini --model $model -i \"$prompt\"" C-m
+    echo ">>> Starting $role in pane $pane_idx..."
+    # 터미널 초기화 후 명령어를 실행하여 버퍼 문제를 방지
+    tmux send-keys -t "$SESSION:0.$pane_idx" "clear && source ~/.bashrc && gemini --model $model -i \"$prompt\"" C-m
+    sleep 0.2
 }
 
+# 각 패널에 에이전트 할당
 # PLANNER (Top-Left)
 run_agent 0 "pro" "strategic planner"
 
