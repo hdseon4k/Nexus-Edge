@@ -1,3 +1,8 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1773651594
-icon.svg::CompressedTexture2D::9093068714527342031::1773651583::1773651596::1::::<><><>0<>0<>6b491a5c5b1ef470d2323d8963c468fe<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
+::res://::1773796529
+::res://assets/::1773796529
+icon.svg::CompressedTexture2D::9093068714527342031::1773651583::1773796530::1::::<><><>0<>0<>b0e5e661a221e79546993e990802f7ce<>res://.godot/imported/icon.svg-56083ea2a1f1a4f1e49773bdc6d7826c.ctex::
+::res://scenes/::1773796515
+forklift.tscn::PackedScene::6066456492166519282::1773653527::0::1::::<><><>0<>0<><>::
+main.tscn::PackedScene::2335446440391021572::1773796510::0::1::::<><><>0<>0<><>::uid://csovwf3mgjtws::::res://scenes/forklift.tscn
+::res://scripts/::1773651670

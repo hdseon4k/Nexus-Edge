@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://8jkpxxdg8asy"]
 
-[ext_resource type="PackedScene" uid="uid://csovwf3mgjtws" path="res://forklift.tscn" id="1_ig7tw"]
+[ext_resource type="PackedScene" uid="uid://csovwf3mgjtws" path="res://scenes/forklift.tscn" id="1_ig7tw"]
 
 [sub_resource type="Environment" id="Environment_7dm0k"]
 background_mode = 2
