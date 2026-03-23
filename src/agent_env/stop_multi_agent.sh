@@ -47,7 +47,7 @@ echo -e "${YELLOW}--------------------------------------------------------${NC}"
 if [ -d "$PROJECT_NAME" ]; then
     echo -e "${GREEN}✅ Cleanup complete for [$PROJECT_NAME].${NC}"
     echo "   - Project folder and history are preserved."
-    [ -d "$PROJECT_NAME/backups" ] && echo "   - Memory backups available in: $PROJECT_NAME/backups/"
+    [ -d "$PROJECT_NAME/backups" ] && echo "   - Database backups available in: $PROJECT_NAME/backups/"
 else
     echo -e "${YELLOW}⚠ Warning: Project folder [$PROJECT_NAME/] not found.${NC}"
 fi

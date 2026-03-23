@@ -12,7 +12,7 @@ mkdir -p "$PROJECT_NAME"
 cd "$PROJECT_NAME" || { echo "Failed to enter directory: $PROJECT_NAME"; exit 1; }
 
 # 폴더 안에서의 파일 경로 설정
-MEMORY_FILE="memory.jsonl"
+DB_FILE="memory.db"
 BACKUP_DIR="./backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -28,35 +28,41 @@ echo "--------------------------------------------------------"
 tmux kill-session -t "$SESSION" 2>/dev/null
 mkdir -p "$BACKUP_DIR"
 
-# 메모리 백업 및 초기화
-if [ -f "$MEMORY_FILE" ]; then
-    cp "$MEMORY_FILE" "$BACKUP_DIR/memory_$TIMESTAMP.jsonl"
-    echo "✔ Previous memory backed up within project folder."
+# 데이터베이스 백업 및 초기화
+if [ -f "$DB_FILE" ]; then
+    cp "$DB_FILE" "$BACKUP_DIR/memory_$TIMESTAMP.db"
+    echo "✔ Previous database backed up within project folder."
 fi
 
-# MCP Memory Server 환경 변수 설정 (stdio 방식 사용)
-export MEMORY_FILE_PATH="$(pwd)/$MEMORY_FILE"
-echo ">>> Using MCP Memory Server with file: $MEMORY_FILE_PATH"
+# SQLite 초기 스키마 생성
+sqlite3 "$DB_FILE" "CREATE TABLE IF NOT EXISTS project_memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT,
+    content TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);"
+echo ">>> Initialized SQLite database: $DB_FILE"
+
+# MCP SQLite Server 설정
+export DB_PATH="$(pwd)/$DB_FILE"
+echo ">>> Using MCP SQLite Server with DB: $DB_PATH"
 
 # =================================================================
-# 2.5. 프로젝트 로컬 Gemini 설정 생성 (MCP Memory)
+# 2.5. 프로젝트 로컬 Gemini 설정 생성 (MCP SQLite)
 # =================================================================
 mkdir -p .gemini
 cat <<INNER_EOF > .gemini/settings.json
 {
   "mcpServers": {
-    "memory": {
+    "sqlite": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {
-        "MEMORY_FILE_PATH": "${MEMORY_FILE_PATH}"
-      },
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "--db-path", "${DB_PATH}"],
       "trust": true
     }
   }
 }
 INNER_EOF
-echo ">>> Created project-local .gemini/settings.json for MCP Memory"
+echo ">>> Created project-local .gemini/settings.json for MCP SQLite"
 
 # =================================================================
 # 3. Tmux 세션 생성 및 2x2 분할
@@ -94,7 +100,7 @@ run_agent() {
     local pane_idx=$1
     local model=$2
     local role=$3
-    local prompt="You are a $role for project [$PROJECT_NAME]. Please help me with the development process."
+    local prompt="You are a $role for project [$PROJECT_NAME]. Please help me with the development process. When saving information, use 'write_query' to insert into the 'project_memories' table (category, content). When searching, use 'read_query'. Table schema: category (classification), content (details), created_at (timestamp)."
     
     echo ">>> Starting $role in pane $pane_idx..."
     # 터미널 초기화 후 명령어를 실행하여 버퍼 문제를 방지
@@ -107,10 +113,10 @@ run_agent() {
 run_agent 0 "pro" "strategic planner"
 
 # RESEARCHER (Top-Right)
-run_agent 1 "flash" "researcher"
+run_agent 1 "gemini-2.5-pro" "researcher"
 
 # DEVELOPER (Bottom-Left)
-run_agent 2 "pro" "developer"
+run_agent 2 "flash" "developer"
 
 # OPERATOR (Bottom-Right)
 tmux send-keys -t "$SESSION:0.3" "clear && echo \">>> Workdir: $(pwd)\" && echo \">>> Project: $PROJECT_NAME\" && ls -F" C-m
