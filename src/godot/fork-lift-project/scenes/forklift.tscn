@@ -1,11 +1,17 @@
 [gd_scene format=3 uid="uid://csovwf3mgjtws"]
 
 [ext_resource type="Script" uid="uid://db4aogv0mu0y3" path="res://scripts/forklift_controller.gd" id="1_k1yrg"]
+[ext_resource type="Script" uid="uid://rwdkqbuky72d" path="res://scripts/camera_controller.gd" id="2_waasx"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_tsqm0"]
 size = Vector3(1.5, 1, 2.5)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_waasx"]
+size = Vector3(0.2, 0.1, 1)
+
 [node name="Forklift" type="VehicleBody3D" unique_id=48115629]
+center_of_mass_mode = 1
+center_of_mass = Vector3(0, -0.75, 0)
 script = ExtResource("1_k1yrg")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1202946126]
@@ -15,33 +21,70 @@ shape = SubResource("BoxShape3D_tsqm0")
 size = Vector3(1.4, 0.9, 2.4)
 
 [node name="FrontLeft" type="VehicleWheel3D" parent="." unique_id=1547645124]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, -1)
-use_as_steering = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, -0.05, -1)
+use_as_traction = true
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="FrontLeft" unique_id=630711681]
 transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
 height = 0.5
 
 [node name="FrontRight" type="VehicleWheel3D" parent="." unique_id=1413197728]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, -1)
-use_as_steering = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, -0.05, -1)
+use_as_traction = true
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="FrontRight" unique_id=1857054137]
 transform = Transform3D(-4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
 height = 0.5
 
 [node name="BackLeft" type="VehicleWheel3D" parent="." unique_id=865768711]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 1)
-use_as_traction = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, -0.05, 1)
+use_as_steering = true
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="BackLeft" unique_id=1305452349]
 transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
 height = 0.5
 
 [node name="BackRight" type="VehicleWheel3D" parent="." unique_id=16986788]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
-use_as_traction = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, -0.05, 1)
+use_as_steering = true
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="BackRight" unique_id=764043666]
 transform = Transform3D(-4.3711385e-08, 0.99999994, 0, -0.99999994, -4.3711385e-08, 0, 0, 0, 1, 0, 0, 0)
 height = 0.5
+
+[node name="SpringArm3D" type="SpringArm3D" parent="." unique_id=2110623048]
+spring_length = 5.0
+script = ExtResource("2_waasx")
+
+[node name="Camera3D" type="Camera3D" parent="SpringArm3D" unique_id=1377698576]
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="." unique_id=526785006]
+
+[node name="Fork" type="AnimatableBody3D" parent="." unique_id=1157857166]
+
+[node name="CollisionShape3D_R" type="CollisionShape3D" parent="Fork" unique_id=15764998]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, -0.3, -2)
+shape = SubResource("BoxShape3D_waasx")
+
+[node name="CSGBox3D_R" type="CSGBox3D" parent="Fork" unique_id=2115803391]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, -0.3, -2)
+size = Vector3(0.2, 0.1, 1)
+
+[node name="CollisionShape3D_L" type="CollisionShape3D" parent="Fork" unique_id=1273844414]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, -0.3, -2)
+shape = SubResource("BoxShape3D_waasx")
+
+[node name="CSGBox3D_L" type="CSGBox3D" parent="Fork" unique_id=1977421721]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.49957645, -0.3, -2)
+size = Vector3(0.2, 0.1, 1)
+
+[node name="Sensors" type="Node3D" parent="." unique_id=232020636]
+
+[node name="RayCast3D" type="RayCast3D" parent="Sensors" unique_id=644342457]
+target_position = Vector3(-3.5, 0, -3.5)
+
+[node name="RayCast3D2" type="RayCast3D" parent="Sensors" unique_id=628009100]
+target_position = Vector3(0, 0, -5)
+
+[node name="RayCast3D3" type="RayCast3D" parent="Sensors" unique_id=691542590]
+target_position = Vector3(3.5, 0, -3.5)
