@@ -14,6 +14,8 @@ var target_position: Vector3 = Vector3.ZERO # 최종 목표 지점을 저장할 
 # --- 4일차 추가 변수 ---
 @onready var fork: AnimatableBody3D = $Fork
 @onready var sensors: Node3D = $Sensors
+@onready var headlights: Node3D = $Headlights
+@onready var tail_lights: Node3D = $TailLights
 @export var lift_speed: float = 1.0
 @export var max_lift_height: float = 2.0
 @export var min_lift_height: float = 0.0
@@ -69,6 +71,9 @@ func _physics_process(delta: float) -> void:
 		var new_y = fork.position.y + (lift_direction * lift_speed * delta)
 		new_y = clamp(new_y, min_lift_height, max_lift_height)
 		fork.position.y = new_y
+		# 5일차 추가: 3D 레이블 업데이트 (단계 3)
+		if height_label:
+			height_label.text = "Height: %.2fm" % fork.position.y
 
 	# 3. 주행 로직
 	# 수동 조작 입력을 먼저 확인합니다.

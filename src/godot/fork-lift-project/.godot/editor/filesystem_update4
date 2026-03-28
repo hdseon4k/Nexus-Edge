@@ -1,4 +1,1 @@
-res://scenes/forklift.tscn
-res://scenes/main.tscn
 res://scripts/forklift_controller.gd
-res://scripts/camera_controller.gd

@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://e5ls21qu138s"]
+
+[ext_resource type="Script" uid="uid://b036oybifbt3f" path="res://scripts/hud_controller.gd" id="1_ahhtf"]
+
+[node name="CanvasLayer" type="CanvasLayer" unique_id=1119943038]
+script = ExtResource("1_ahhtf")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1953940913]
+offset_right = 313.0
+offset_bottom = 330.0
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 15
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 15
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=1302739589]
+layout_mode = 2
+
+[node name="SpeedLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=1571459528]
+layout_mode = 2
+text = "0.0m/s"
+
+[node name="StatusLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=1545523703]
+layout_mode = 2

@@ -1,7 +1,0 @@
-PROGRAM main
-VAR
-END_VAR
-
-
-
-END_PROGRAM

@@ -2,12 +2,15 @@
 
 [ext_resource type="Script" uid="uid://db4aogv0mu0y3" path="res://scripts/forklift_controller.gd" id="1_k1yrg"]
 [ext_resource type="Script" uid="uid://rwdkqbuky72d" path="res://scripts/camera_controller.gd" id="2_waasx"]
+[ext_resource type="Texture2D" uid="uid://dm1m1ybcxkpd5" path="res://assets/arrow_forward.png" id="3_u4wsy"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_tsqm0"]
 size = Vector3(1.5, 1, 2.5)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_waasx"]
 size = Vector3(0.2, 0.1, 1)
+
+[sub_resource type="SystemFont" id="SystemFont_u4wsy"]
 
 [node name="Forklift" type="VehicleBody3D" unique_id=48115629]
 center_of_mass_mode = 1
@@ -78,6 +81,13 @@ shape = SubResource("BoxShape3D_waasx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.49957645, -0.3, -2)
 size = Vector3(0.2, 0.1, 1)
 
+[node name="HeightLabel" type="Label3D" parent="Fork" unique_id=674375912]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.84625435, -1.478607)
+pixel_size = 0.01
+billboard = 1
+text = "Height: 0.0m"
+font = SubResource("SystemFont_u4wsy")
+
 [node name="Sensors" type="Node3D" parent="." unique_id=232020636]
 
 [node name="RayCast3D" type="RayCast3D" parent="Sensors" unique_id=644342457]
@@ -88,3 +98,10 @@ target_position = Vector3(0, 0, -5)
 
 [node name="RayCast3D3" type="RayCast3D" parent="Sensors" unique_id=691542590]
 target_position = Vector3(3.5, 0, -3.5)
+
+[node name="Decal" type="Decal" parent="." unique_id=1773976953]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -5)
+texture_albedo = ExtResource("3_u4wsy")
+texture_emission = ExtResource("3_u4wsy")
+emission_energy = 16.0
+modulate = Color(0, 1, 0, 1)
