@@ -6,8 +6,6 @@ extends VehicleBody3D
 @export var brake_force: float = 50.0
 
 # --- 3일차 추가 변수 ---
-# @onready: 노드가 Scene에 추가되고 준비가 완료되면 변수를 초기화합니다.
-# $NavigationAgent3D: Scene 트리에서 자식 노드인 NavigationAgent3D를 찾아 할당합니다.
 @onready var navigation_agent: NavigationAgent3D = $NavigationAgent3D
 var target_position: Vector3 = Vector3.ZERO # 최종 목표 지점을 저장할 변수
 
@@ -16,18 +14,35 @@ var target_position: Vector3 = Vector3.ZERO # 최종 목표 지점을 저장할 
 @onready var sensors: Node3D = $Sensors
 @onready var headlights: Node3D = $Headlights
 @onready var tail_lights: Node3D = $TailLights
+@onready var height_label: Label3D = $Fork/HeightLabel
 @export var lift_speed: float = 1.0
 @export var max_lift_height: float = 2.0
 @export var min_lift_height: float = 0.0
 
 # --- 시그널 (5일차 HUD 연동 준비) ---
 signal target_updated(target_pos: Vector3)
+signal speed_updated(speed_mps: float)
+signal status_changed(new_status: String)
 
+# 현재 상태 저장을 위한 변수
+var current_status: String = ""
 
 # --- 자율/수동 주행 상태 변수 ---
 var is_navigating: bool = false # 자율 주행 모드 여부를 나타내는 플래그
 var autonomous_gear: int = 1 # 자율 주행 기어 (1: 전진, -1: 후진)
 
+
+# 상태 업데이트 및 시그널 방출 헬퍼 함수
+func _update_status(new_status: String):
+	if current_status != new_status:
+		current_status = new_status
+		emit_signal("status_changed", new_status)
+
+# 긴급 제동 함수
+func emergency_brake():
+	engine_force = 0.0
+	brake = brake_force
+	_update_status("EMERGENCY BRAKE")
 
 # 외부에서 호출하여 목표 지점을 설정하는 함수
 func set_target(target_pos: Vector3):
@@ -62,6 +77,9 @@ func check_for_obstacles() -> bool:
 
 # 물리 프레임마다 호출되는 함수
 func _physics_process(delta: float) -> void:
+	# 속도 시그널 방출
+	emit_signal("speed_updated", linear_velocity.length())
+
 	# 1. 장애물 감지 및 AEB (비상 제동)
 	var obstacle_detected = check_for_obstacles()
 
@@ -88,6 +106,7 @@ func _physics_process(delta: float) -> void:
 		# 장애물이 있으면 무조건 엔진 정지 및 브레이크 최대 작동
 		engine_force = 0.0
 		brake = brake_force
+		_update_status("Obstacle Detected!")
 	elif is_navigating:
 		# --- 자율 주행 모드 ---
 		if navigation_agent.is_navigation_finished():
@@ -96,8 +115,10 @@ func _physics_process(delta: float) -> void:
 			engine_force = 0.0
 			steering = 0.0
 			brake = brake_force
+			_update_status("Goal Reached")
 		else:
 			brake = 0.0 # 주행 중이므로 브레이크 해제
+			_update_status("Navigating...")
 			
 			# 다음 경로 지점 계산
 			var next_path_pos = navigation_agent.get_next_path_position()
@@ -136,6 +157,11 @@ func _physics_process(delta: float) -> void:
 		# --- 수동 조작 모드 ---
 		engine_force = engine_input * max_engine_force
 		steering = steer_input * max_steering
+		
+		if engine_input != 0 or steer_input != 0:
+			_update_status("Manual Control")
+		else:
+			_update_status("Ready")
 		
 		# 입력이 없을 때는 브레이크를 걸어 밀림을 방지합니다. (Parking Brake)
 		if engine_input == 0:

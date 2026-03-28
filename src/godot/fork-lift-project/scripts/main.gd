@@ -4,6 +4,13 @@ extends Node3D
 @onready var forklift = $Forklift
 # 보충 실습에서 추가한 바로 그 카메라입니다.
 @onready var camera = $Forklift/SpringArm3D/Camera3D
+@onready var hud = $CanvasLayer
+
+func _ready() -> void:
+	# 5일차 추가: 시그널 연결 (단계 4)
+	if forklift and hud:
+		forklift.speed_updated.connect(hud.update_speed)
+		forklift.status_changed.connect(hud.update_status)
 
 # 키보드/마우스 입력이 발생할 때마다 호출됩니다.
 func _input(event: InputEvent) -> void:
@@ -11,9 +18,12 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
 		# 현재 3D 물리 세계의 상태를 가져옵니다.
 		var space_state = get_world_3d().direct_space_state
-		# 카메라 위치에서 마우스 클릭 지점으로 향하는 광선(Ray)을 계산합니다.
-		var from = camera.project_ray_origin(event.position)
-		var to = from + camera.project_ray_normal(event.position) * 1000.0
+		# 현재 활성 카메라를 사용하여 마우스 클릭 지점으로 향하는 광선(Ray)을 계산합니다.
+		var active_camera = get_viewport().get_camera_3d()
+		if not active_camera: return
+		
+		var from = active_camera.project_ray_origin(event.position)
+		var to = from + active_camera.project_ray_normal(event.position) * 1000.0
 		
 		# 광선 쿼리(질의)를 생성합니다.
 		var query = PhysicsRayQueryParameters3D.create(from, to)
