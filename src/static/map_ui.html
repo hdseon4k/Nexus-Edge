@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus-Edge Real-time Inventory Map</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #121212; color: #fff; font-family: 'Outfit', sans-serif; }
+        #mapCanvas { background-color: #1e1e1e; width: 100vw; height: 100vh; display: block; }
+        .glass-panel { 
+            position: absolute; top: 20px; left: 20px; 
+            background: rgba(255, 255, 255, 0.05); 
+            backdrop-filter: blur(10px); 
+            padding: 20px; border-radius: 12px; 
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="glass-panel">
+        <h2>Live Inventory Map</h2>
+        <p>Status: <span id="status">Waiting for data stream...</span></p>
+    </div>
+    <canvas id="mapCanvas"></canvas>
+    <script>
+        // TODO: Implement WebSocket connection to receive SLAM coordinates and barcode data
+        // TODO: Implement Canvas 2D rendering for trajectory (lines) and barcodes (dots)
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+    </script>
+</body>
+</html>
