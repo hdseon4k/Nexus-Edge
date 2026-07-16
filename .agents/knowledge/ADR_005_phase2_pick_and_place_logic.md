@@ -33,3 +33,13 @@ Nexus-Edge 프로젝트의 2단계 현장 실증(Live PoC)에서는 단순한 �
 ## 4. Next Steps (다음 작업)
 * 현재 개발 중인 `detector.py` 및 `visual_slam.py` 코드에 상기 트리거 조건(Threshold) 변수들을 추가.
 * WebSocket 상태 전송 페이로드에 `Virtual Container(Cart-01)` 상태값 정의.
+
+
+## Connections
+- **Related ADRs**:
+  - [[ADR_002_inventory_mapping_feasibility]]
+  - [[ADR_003_phase1_data_collection]]
+  - [[ADR_004_phase2_live_poc]]
+- **Hub**: [[STATUS]], [[README]]
+
+**Tags**: #ADR #Knowledge

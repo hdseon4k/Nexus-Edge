@@ -25,3 +25,9 @@
     *   A4 크기에 맞추어 커팅 라인(정사각형)이 포함된 다수의 AprilTag(tag36h11) PDF를 생성하는 스크립트.
     *   여러 페이지를 하나의 PDF 파일로 병합 출력 기능 추가.
     *   마지막 페이지에 액션캠/X-H2S 캘리브레이션을 위한 ChArUco Board를 자동 첨부하도록 구현됨.
+
+
+## Connections
+- **Hub**: [[STATUS]], [[README]]
+
+**Tags**: #Session #Knowledge

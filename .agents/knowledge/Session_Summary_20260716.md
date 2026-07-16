@@ -25,3 +25,9 @@
 ### 향후 방향
 - 논의된 아키텍처 결정 사항이나 중요한 구현 로직은 계속해서 `.agents/knowledge/` 내에 ADR 형태로 마크다운 작성 유지.
 - 복잡한 문서 간 관계는 옵시디언을 통해 시각화하고, AI 에이전트를 통한 코딩 지원 지속.
+
+
+## Connections
+- **Hub**: [[STATUS]], [[README]]
+
+**Tags**: #Session #Knowledge

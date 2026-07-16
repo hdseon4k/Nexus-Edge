@@ -40,3 +40,13 @@ SW 구동 없이, 카메라 자체 녹화 기능(SD 카드 저장)을 활용하�
 - [ ] Setup A 주행 원본 영상 (MP4, 4K)
 - [ ] Setup B 줌 촬영 원본 영상 (MP4, 1080p)
 - [ ] 부착된 ArUco 마커 번호 및 위치(거리) 측정 기록 노트
+
+
+## Connections
+- **Related ADRs**:
+  - [[ADR_002_inventory_mapping_feasibility]]
+  - [[ADR_004_phase2_live_poc]]
+  - [[ADR_005_phase2_pick_and_place_logic]]
+- **Hub**: [[STATUS]], [[README]]
+
+**Tags**: #ADR #Knowledge

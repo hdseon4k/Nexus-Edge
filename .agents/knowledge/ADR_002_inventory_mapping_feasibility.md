@@ -101,3 +101,13 @@
 ## Verification Plan
 1. **Hailo 컴파일 테스트**: 기존 YOLOv11 모델을 Hailo Dataflow Compiler를 통해 양자화 및 `.hef`로 변환하고 구동되는지 사전 검증.
 2. **네트워크 병목 비교 (Setup B vs C)**: 무압축 무선 영상 전송(Setup B)과 메타데이터 전송(Setup C) 간의 네트워크 트래픽 및 중앙 서버/공유기 부하 차이를 비교 측정.
+
+
+## Connections
+- **Related ADRs**:
+  - [[ADR_003_phase1_data_collection]]
+  - [[ADR_004_phase2_live_poc]]
+  - [[ADR_005_phase2_pick_and_place_logic]]
+- **Hub**: [[STATUS]], [[README]]
+
+**Tags**: #ADR #Knowledge

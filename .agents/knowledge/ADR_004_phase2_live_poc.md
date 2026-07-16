@@ -31,3 +31,13 @@
 2. **시스템 Initialize**: 초기 위치(시작점)에 있는 ArUco 마커를 카메라에 비추어 SLAM의 0점(X:0, Y:0)을 잡습니다.
 3. **주행 테스트**: 창고를 주행하며 실시간으로 태블릿(Lenovo Tab) 화면의 2D 웹 맵을 모니터링합니다.
 4. **결과 확인**: 내가 걸어간 궤적이 선으로 그려지고, 선반에 있던 박스들의 바코드 ID가 정확한 위치에 점으로 찍히는지 확인합니다.
+
+
+## Connections
+- **Related ADRs**:
+  - [[ADR_002_inventory_mapping_feasibility]]
+  - [[ADR_003_phase1_data_collection]]
+  - [[ADR_005_phase2_pick_and_place_logic]]
+- **Hub**: [[STATUS]], [[README]]
+
+**Tags**: #ADR #Knowledge
