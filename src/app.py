@@ -167,6 +167,10 @@ def bg_site_survey_worker():
             else:
                 time.sleep(0.01)
                 
+        # Safely release cap from the same thread that reads it
+        if cap and cap.isOpened():
+            cap.release()
+            
     t_grabber = threading.Thread(target=frame_grabber, daemon=True)
     t_grabber.start()
 
@@ -252,8 +256,8 @@ def bg_site_survey_worker():
 
         time.sleep(0.03)
 
-    if cap and cap.isOpened():
-        cap.release()
+    # Wait briefly for grabber thread to cleanly release cap
+    t_grabber.join(timeout=2.0)
         
     with stream_lock:
         latest_stream_frame = None
