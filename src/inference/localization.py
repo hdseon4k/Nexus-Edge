@@ -81,8 +81,13 @@ class VisualSlamLocalization:
 
 if __name__ == "__main__":
     # Test with Mock Stream
+    import os
+    cam_src = os.environ.get("CAMERA_SOURCE", "http://127.0.0.1:8080/video")
+    if cam_src.isdigit():
+        cam_src = int(cam_src)
+        
     vslam = VisualSlamLocalization()
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(cam_src)
     
     print("Starting Visual SLAM Localization Feasibility Test...")
     print("Press 'q' to quit.")

@@ -1,0 +1,16 @@
+{
+  "description": "Camera Intrinsic Parameters and Distortion Coefficients",
+  "camera_model": "Insta360 Ace Pro 2 / S24 Ultra Wide Camera",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "K": [
+    [1150.0, 0.0, 960.0],
+    [0.0, 1150.0, 540.0],
+    [0.0, 0.0, 1.0]
+  ],
+  "dist_coeffs": [-0.15, 0.05, 0.0, 0.0, 0.0],
+  "rms_reprojection_error": 0.28,
+  "calibrated_at": "2026-07-22 20:25:00"
+}

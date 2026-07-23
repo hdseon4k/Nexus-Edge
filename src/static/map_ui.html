@@ -1,39 +1,341 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus-Edge Real-time Inventory Map</title>
+    <title>NEXUS-EDGE // VISUAL_SLAM & 6-DOF MARKER HUD</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; padding: 0; background-color: #121212; color: #fff; font-family: 'Outfit', sans-serif; }
-        #mapCanvas { background-color: #1e1e1e; width: 100vw; height: 100vh; display: block; }
-        .glass-panel { 
-            position: absolute; top: 20px; left: 20px; 
-            background: rgba(255, 255, 255, 0.05); 
-            backdrop-filter: blur(10px); 
-            padding: 20px; border-radius: 12px; 
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        :root {
+            --bg-dark: #050811;
+            --panel-bg: #0C101D;
+            --panel-card: #0F172A;
+            --border-tech: rgba(0, 242, 254, 0.25);
+            --border-dim: #1E293B;
+            --accent-cyan: #00F2FE;
+            --accent-emerald: #00FF66;
+            --accent-amber: #FFB300;
+            --accent-crimson: #FF1744;
+            --text-main: #E2E8F0;
+            --text-muted: #64748B;
         }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'JetBrains Mono', monospace; }
+        body { background-color: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-image: radial-gradient(rgba(0, 242, 254, 0.04) 1px, transparent 0); background-size: 20px 20px; }
+
+        header {
+            height: 56px; background: var(--panel-bg); border-bottom: 1px solid var(--border-tech);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 10;
+        }
+
+        .logo-group { display: flex; align-items: center; gap: 10px; }
+        .logo-icon { width: 28px; height: 28px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-cyan); border-radius: 2px; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-weight: 700; color: var(--accent-cyan); font-size: 0.85rem; }
+        h1 { font-family: 'Share Tech Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan); letter-spacing: 0.08em; }
+        h1 span { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
+
+        .header-actions { display: flex; align-items: center; gap: 10px; }
+        .btn-action {
+            background: var(--panel-card); border: 1px solid var(--border-dim); color: var(--text-main);
+            padding: 8px 14px; border-radius: 2px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; text-transform: uppercase;
+        }
+        .btn-action:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0, 242, 254, 0.08); }
+        .btn-calib { border-color: var(--accent-amber); color: var(--accent-amber); }
+        .btn-tag-mgr { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        .workspace { flex: 1; display: grid; grid-template-columns: 1fr 340px; gap: 14px; padding: 14px; position: relative; }
+        .canvas-card { background: var(--panel-bg); border: 1px solid var(--border-dim); border-radius: 4px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        #mapCanvas { width: 100%; height: 100%; background: #03050A; }
+
+        .sidebar { display: flex; flex-direction: column; gap: 14px; }
+        .info-card { background: var(--panel-bg); border: 1px solid var(--border-dim); border-left: 3px solid var(--accent-cyan); border-radius: 4px; padding: 16px; }
+        .card-title { font-family: 'Share Tech Mono', monospace; font-size: 0.8rem; font-weight: 700; color: var(--accent-cyan); margin-bottom: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+        .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .telemetry-item { background: var(--panel-card); border: 1px solid var(--border-dim); border-radius: 2px; padding: 10px; }
+        .telemetry-label { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; }
+        .telemetry-value { font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan); }
+
+        /* Modal Popup Styles */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(2, 4, 10, 0.85); backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center; z-index: 100;
+        }
+        .modal-box {
+            background: var(--panel-bg); border: 1px solid var(--border-tech); border-top: 3px solid var(--accent-cyan); border-radius: 4px;
+            width: 780px; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.9); position: relative; max-height: 90vh; overflow-y: auto;
+        }
+        .modal-title { font-family: 'Share Tech Mono', monospace; font-size: 1.15rem; font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px; letter-spacing: 0.05em; }
+        .modal-subtitle { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 16px; }
+
+        /* World Frame Coordinate Guide Card */
+        .coord-guide-card {
+            background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.2);
+            border-radius: 2px; padding: 12px; margin-bottom: 16px; font-size: 0.78rem; line-height: 1.5;
+        }
+        .coord-title { font-weight: 700; color: var(--accent-cyan); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+        .coord-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; color: var(--text-main); font-size: 0.72rem; }
+
+        /* Marker Table */
+        .marker-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 0.78rem; }
+        .marker-table th, .marker-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-dim); text-align: left; }
+        .marker-table th { background: var(--panel-card); color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; }
+        .btn-table { padding: 4px 8px; border-radius: 2px; border: 1px solid transparent; font-size: 0.7rem; cursor: pointer; font-weight: 600; text-transform: uppercase; }
+        .btn-edit { background: rgba(0, 242, 254, 0.15); border-color: var(--accent-cyan); color: var(--accent-cyan); margin-right: 4px; }
+        .btn-del { background: rgba(255, 23, 68, 0.15); border-color: var(--accent-crimson); color: var(--accent-crimson); }
+
+        /* Marker 6-DoF Form */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; }
+        .form-input { background: #03050A; border: 1px solid var(--border-dim); border-radius: 2px; padding: 6px 8px; color: var(--text-main); font-size: 0.8rem; }
+        .form-input:focus { border-color: var(--accent-cyan); outline: none; }
+
+        .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; }
+        .btn-modal { padding: 8px 16px; border-radius: 2px; border: 1px solid var(--border-dim); font-weight: 600; font-size: 0.75rem; cursor: pointer; text-transform: uppercase; }
+        .btn-close { background: var(--panel-card); color: var(--text-main); }
+        .btn-save { background: rgba(0, 242, 254, 0.15); border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        .instruction-box { background: rgba(255, 179, 0, 0.05); border: 1px solid var(--accent-amber); padding: 12px; border-radius: 2px; font-size: 0.75rem; color: var(--accent-amber); margin-bottom: 16px; line-height: 1.5; }
+        .progress-container { background: #03050A; height: 6px; border-radius: 2px; overflow: hidden; margin-bottom: 10px; border: 1px solid var(--border-dim); }
+        .progress-bar { background: var(--accent-cyan); height: 100%; width: 0%; transition: width 0.3s; }
     </style>
 </head>
 <body>
-    <div class="glass-panel">
-        <h2>Live Inventory Map</h2>
-        <p>Status: <span id="status">Waiting for data stream...</span></p>
+    <header>
+        <div class="logo-group">
+            <div class="logo-icon">NE</div>
+            <h1>NEXUS-EDGE // SETUP A <span>[VISUAL_SLAM_TELEMETRY]</span></h1>
+        </div>
+        <div class="header-actions">
+            <button class="btn-action btn-tag-mgr" onclick="openMarkerModal()">[MARKER.MANAGER]</button>
+            <button class="btn-action btn-calib" onclick="openCalibModal()">[SYS.CALIBRATE]</button>
+            <button class="btn-action" onclick="toggleSurvey()">[SURVEY.MODE]</button>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <div class="canvas-card">
+            <canvas id="mapCanvas"></canvas>
+        </div>
+
+        <div class="sidebar">
+            <div class="info-card">
+                <div class="card-title">LIVE TELEMETRY // 6-DOF</div>
+                <div class="telemetry-grid">
+                    <div class="telemetry-item"><div class="telemetry-label">POS_X (M)</div><div class="telemetry-value" id="valX">0.00</div></div>
+                    <div class="telemetry-item"><div class="telemetry-label">POS_Y (M)</div><div class="telemetry-value" id="valY">0.00</div></div>
+                    <div class="telemetry-item"><div class="telemetry-label">POS_Z (M)</div><div class="telemetry-value" id="valZ">0.00</div></div>
+                    <div class="telemetry-item"><div class="telemetry-label">TAG_COUNT</div><div class="telemetry-value" id="valAnchorCount">0 Tags</div></div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="card-title">SYSTEM STATUS // NODE</div>
+                <div class="telemetry-grid">
+                    <div class="telemetry-item"><div class="telemetry-label">LAST_SEEN_TAG</div><div class="telemetry-value" style="font-size:0.85rem; color:#E2E8F0;" id="valLastTag">TAG #0</div></div>
+                    <div class="telemetry-item"><div class="telemetry-label">STATE</div><div class="telemetry-value" style="font-size:0.85rem; color:var(--accent-emerald);">ONLINE</div></div>
+                </div>
+            </div>
+        </div>
     </div>
-    <canvas id="mapCanvas"></canvas>
+
+    <!-- AprilTag 6-DoF Marker Manager Modal -->
+    <div class="modal-overlay" id="markerModal">
+        <div class="modal-box">
+            <div class="modal-title">[APRILTAG_6DOF_MANAGER]</div>
+            <div class="modal-subtitle">Manage 3D World Position (X,Y,Z) & Rotation (Roll, Pitch, Yaw) for AprilTags (config/marker_map.json)</div>
+
+            <div class="coord-guide-card">
+                <div class="coord-title">[WORLD_FRAME_SPEC] (+X: RIGHT, +Y: DOWN, +Z: FORWARD)</div>
+                <div class="coord-grid">
+                    <div>• <strong>ORIGIN_TAG (X-Y PLANAR, +Z)</strong>: (0, 0, 0, 0, 0, 0)</div>
+                    <div>• <strong>FRONT_WALL (-Z FORWARD)</strong>: (0, 0, d_z, 0, 0, 180)</div>
+                    <div>• <strong>FLOOR_TAG (-Y UPWARD)</strong>: (0, d_y, d_z, 0, 90, 0)</div>
+                    <div>• <strong>LEFT_WALL (+X RIGHT)</strong>: (-d_x, 0, 0, 0, -90, 0)</div>
+                </div>
+            </div>
+
+            <table class="marker-table">
+                <thead>
+                    <tr>
+                        <th>ID</th><th>LOCATION_NAME</th><th>X (M)</th><th>Y (M)</th><th>Z (M)</th><th>ROLL</th><th>PITCH</th><th>YAW</th><th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody id="markerTableBody">
+                    <!-- Dynamically Loaded -->
+                </tbody>
+            </table>
+
+            <div style="font-weight:700; font-size:0.8rem; color:var(--accent-cyan); margin-bottom:10px;">[REGISTER / UPDATE MARKER]</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <div class="form-label">Tag ID *</div>
+                    <input type="text" id="mTagId" class="form-input" placeholder="0">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <div class="form-label">Location Name</div>
+                    <input type="text" id="mName" class="form-input" placeholder="Entrance Marker #0">
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Size (m)</div>
+                    <input type="text" id="mSize" class="form-input" placeholder="0.16">
+                </div>
+            </div>
+            <div class="form-grid">
+                <div class="form-group"><div class="form-label">X (m)</div><input type="text" id="mX" class="form-input" placeholder="0.0"></div>
+                <div class="form-group"><div class="form-label">Y (m)</div><input type="text" id="mY" class="form-input" placeholder="0.0"></div>
+                <div class="form-group"><div class="form-label">Z (m)</div><input type="text" id="mZ" class="form-input" placeholder="0.0"></div>
+                <div class="form-group"><div class="form-label">Roll (°)</div><input type="text" id="mRoll" class="form-input" placeholder="0.0"></div>
+                <div class="form-group"><div class="form-label">Pitch (°)</div><input type="text" id="mPitch" class="form-input" placeholder="0.0"></div>
+                <div class="form-group"><div class="form-label">Yaw (°)</div><input type="text" id="mYaw" class="form-input" placeholder="0.0"></div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal btn-close" onclick="closeMarkerModal()">[CLOSE]</button>
+                <button class="btn-modal btn-save" onclick="saveMarkerFromForm()">[SAVE MARKER]</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto Calibration Modal -->
+    <div class="modal-overlay" id="calibModal">
+        <div class="modal-box">
+            <div class="modal-title">[AUTO_LENS_CALIBRATION]</div>
+            <div class="modal-subtitle">Calibrates optical lens distortion (K matrix & D vector) for high-accuracy VisualSLAM.</div>
+            <div class="progress-container"><div class="progress-bar" id="calibProgressBar"></div></div>
+            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">
+                <span id="calibProgressText">PROGRESS: 0%</span><span id="calibFrameCount">0 / 20 FRAMES COLLECTED</span>
+            </div>
+            <div class="instruction-box" id="calibInstruction">📋 <strong>INSTRUCTIONS:</strong><br>1. Fix action cam settings to FHD(1080p)@30fps & Linear FOV.<br>2. Present chessboard calibration target and collect 20 frames.</div>
+            <div class="modal-buttons">
+                <button class="btn-modal btn-close" onclick="closeCalibModal()">[CLOSE]</button>
+                <button class="btn-modal btn-save" id="calibStartBtn" onclick="runCalibration()">[START AUTO CALIBRATION]</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // TODO: Implement WebSocket connection to receive SLAM coordinates and barcode data
-        // TODO: Implement Canvas 2D rendering for trajectory (lines) and barcodes (dots)
         const canvas = document.getElementById('mapCanvas');
         const ctx = canvas.getContext('2d');
-        
+        let trajectory = [], zoom = 30, originX, originY, anchors = [];
+
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight;
+            originX = canvas.width / 2; originY = canvas.height / 2; drawMap();
         }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+        async function fetchMarkers() {
+            try {
+                const res = await fetch('/api/markers');
+                const data = await res.json();
+                anchors = [];
+                const tbody = document.getElementById('markerTableBody');
+                tbody.innerHTML = '';
+                
+                if (data.markers) {
+                    Object.keys(data.markers).forEach(id => {
+                        const m = data.markers[id];
+                        const roll = m.roll || 0.0, pitch = m.pitch || 0.0, yaw = m.yaw || 0.0;
+                        anchors.push({x: m.x, y: m.y, id: `#${id}`, name: m.location_name});
+                        
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>#${id}</td>
+                                <td>${m.location_name}</td>
+                                <td>${m.x}</td>
+                                <td>${m.y}</td>
+                                <td>${m.z}</td>
+                                <td>${roll}°</td>
+                                <td>${pitch}°</td>
+                                <td>${yaw}°</td>
+                                <td>
+                                    <button class="btn-table btn-edit" onclick="fillForm('${id}', '${m.location_name}', ${m.x}, ${m.y}, ${m.z}, ${roll}, ${pitch}, ${yaw}, ${m.size_meters})">EDIT</button>
+                                    <button class="btn-table btn-del" onclick="deleteMarker('${id}')">DEL</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    document.getElementById('valAnchorCount').innerText = `${anchors.length} Tags`;
+                }
+                drawMap();
+            } catch(e) {}
+        }
+
+        function drawMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Render grid
+            ctx.strokeStyle = '#0F172A';
+            ctx.lineWidth = 1;
+            const gridSize = 30;
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
+
+            // Render anchors
+            anchors.forEach(a => {
+                const cx = originX + a.x * zoom, cy = originY - a.y * zoom;
+                ctx.fillStyle = 'rgba(0, 242, 254, 0.15)'; ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#00F2FE'; ctx.lineWidth = 1.5; ctx.stroke();
+                ctx.fillStyle = '#E2E8F0'; ctx.font = '10px "JetBrains Mono"'; ctx.fillText(`TAG ${a.id}`, cx - 14, cy - 14);
+            });
+        }
+
+        function openMarkerModal() { fetchMarkers(); document.getElementById('markerModal').style.display = 'flex'; }
+        function closeMarkerModal() { document.getElementById('markerModal').style.display = 'none'; }
+
+        function fillForm(id, name, x, y, z, roll, pitch, yaw, size) {
+            document.getElementById('mTagId').value = id;
+            document.getElementById('mName').value = name;
+            document.getElementById('mX').value = x;
+            document.getElementById('mY').value = y;
+            document.getElementById('mZ').value = z;
+            document.getElementById('mRoll').value = roll;
+            document.getElementById('mPitch').value = pitch;
+            document.getElementById('mYaw').value = yaw;
+            document.getElementById('mSize').value = size;
+        }
+
+        async function saveMarkerFromForm() {
+            const id = document.getElementById('mTagId').value.trim();
+            if (!id) { alert('Please enter Tag ID'); return; }
+            
+            const payload = {
+                tag_id: id,
+                location_name: document.getElementById('mName').value,
+                x: parseFloat(document.getElementById('mX').value),
+                y: parseFloat(document.getElementById('mY').value),
+                z: parseFloat(document.getElementById('mZ').value),
+                roll: parseFloat(document.getElementById('mRoll').value),
+                pitch: parseFloat(document.getElementById('mPitch').value),
+                yaw: parseFloat(document.getElementById('mYaw').value),
+                size_meters: parseFloat(document.getElementById('mSize').value)
+            };
+
+            await fetch('/api/markers', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+
+            fetchMarkers();
+            alert(`[SYS_MSG] AprilTag 6-DoF Marker #${id} saved successfully!`);
+        }
+
+        async function deleteMarker(id) {
+            if (!confirm(`Delete AprilTag #${id}?`)) return;
+            await fetch(`/api/markers/${id}`, { method: 'DELETE' });
+            fetchMarkers();
+        }
+
+        function openCalibModal() { document.getElementById('calibModal').style.display = 'flex'; }
+        function closeCalibModal() { document.getElementById('calibModal').style.display = 'none'; }
+        fetchMarkers();
     </script>
 </body>
 </html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>NEXUS-EDGE // CONTROL HUD</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #050811;
+            --panel-bg: #0C101D;
+            --border-tech: rgba(0, 242, 254, 0.2);
+            --border-dim: #1E293B;
+            --accent-cyan: #00F2FE;
+            --accent-emerald: #00FF66;
+            --accent-amber: #FFB300;
+            --text-main: #E2E8F0;
+            --text-muted: #64748B;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; font-family: 'JetBrains Mono', monospace; }
+        body { background-color: var(--bg-dark); color: var(--text-main); min-height: 100vh; overflow-x: hidden; display: flex; flex-direction: column; padding: 16px; background-image: radial-gradient(rgba(0, 242, 254, 0.05) 1px, transparent 0); background-size: 24px 24px; }
+        
+        body::-webkit-scrollbar { width: 6px; }
+        body::-webkit-scrollbar-track { background: var(--bg-dark); }
+        body::-webkit-scrollbar-thumb { background: var(--border-dim); border-radius: 3px; }
+        body::-webkit-scrollbar-thumb:hover { background: var(--accent-cyan); }
+
+        header { border-bottom: 1px solid var(--border-tech); padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
+        .sys-title { font-family: 'Share Tech Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan); letter-spacing: 0.1em; }
+        .sys-sub { font-size: 0.7rem; color: var(--text-muted); }
+
+        .hud-panel { background: var(--panel-bg); border: 1px solid var(--border-dim); border-left: 3px solid var(--accent-cyan); border-radius: 4px; padding: 16px; margin-bottom: 14px; position: relative; }
+        .hud-panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-dim); padding-bottom: 8px; margin-bottom: 12px; font-size: 0.75rem; color: var(--text-muted); letter-spacing: 0.05em; }
+
+        .status-badge { display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 700; color: var(--accent-emerald); }
+        .status-dot { width: 8px; height: 8px; background: var(--accent-emerald); border-radius: 50%; box-shadow: 0 0 10px var(--accent-emerald); animation: blink 1.5s infinite; }
+
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .network-info { font-size: 0.75rem; color: var(--text-main); line-height: 1.5; margin-top: 10px; background: rgba(0,0,0,0.3); padding: 10px; border: 1px solid rgba(255,255,255,0.05); }
+
+        .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+        .btn-hud { background: #0F172A; border: 1px solid var(--border-tech); color: var(--text-main); padding: 16px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.15s ease; text-align: center; }
+        .btn-hud:active { transform: translateY(1px); background: rgba(0, 242, 254, 0.15); }
+        .btn-calib { border-color: var(--accent-amber); color: var(--accent-amber); }
+        .btn-full { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        .info-card { background: rgba(255, 179, 0, 0.05); border: 1px solid var(--accent-amber); border-left: 3px solid var(--accent-amber); border-radius: 4px; margin-bottom: 14px; overflow: hidden; }
+        .info-card-header { padding: 12px 16px; font-size: 0.75rem; font-weight: 700; color: var(--accent-amber); display: flex; justify-content: space-between; cursor: pointer; user-select: none; background: rgba(255, 179, 0, 0.1); }
+        .info-card-content { padding: 12px 16px 16px 16px; font-size: 0.7rem; color: var(--text-main); line-height: 1.6; display: block; border-top: 1px solid rgba(255, 179, 0, 0.2); }
+        .info-card-content ul { padding-left: 16px; margin-top: 4px; }
+        .info-card-content li { margin-bottom: 8px; }
+        .highlight { color: var(--accent-amber); font-weight: 700; }
+
+        .log-container { background: #02040A; border: 1px solid var(--border-dim); border-radius: 4px; flex: 1; display: flex; flex-direction: column; min-height: 200px; overflow: hidden; }
+        .log-header { font-size: 0.7rem; color: var(--text-muted); border-bottom: 1px solid var(--border-dim); padding: 12px 12px 8px 12px; display: flex; justify-content: space-between; background: #0C101D; }
+        .log-content { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #38BDF8; overflow-y: auto; flex: 1; height: 0; line-height: 1.5; padding: 8px 12px 12px 12px; }
+        .log-content::-webkit-scrollbar { width: 4px; }
+        .log-content::-webkit-scrollbar-track { background: transparent; }
+        .log-content::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 2px; }
+        .log-content::-webkit-scrollbar-thumb:hover { background: var(--accent-cyan); }
+
+        .video-panel { background: var(--panel-bg); border: 1px solid var(--border-dim); border-radius: 4px; padding: 12px; margin-bottom: 14px; }
+        .video-wrapper { position: relative; width: 100%; height: 35vh; min-height: 250px; border: 1px solid var(--border-tech); background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        #videoStream { width: 100%; max-height: 35vh; display: block; object-fit: contain; }
+        .calib-overlay { position: absolute; bottom: 0; left: 0; width: 100%; padding: 16px; background: rgba(12, 16, 29, 0.15); border-top: 1px solid var(--accent-amber); display: none; flex-direction: column; gap: 8px; backdrop-filter: blur(4px); z-index: 10; }
+        .calib-title { font-size: 0.85rem; font-weight: 700; color: var(--accent-amber); letter-spacing: 0.05em; }
+        .calib-msg { font-size: 0.75rem; color: var(--text-main); }
+        .progress-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--accent-amber); width: 0%; transition: width 0.3s ease; }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <div class="sys-title">NEXUS-EDGE // CONTROL HUD</div>
+            <div class="sys-sub">S24 ULTRA EDGE COMPUTING NODE</div>
+        </div>
+        <div class="sys-sub">v1.4.0</div>
+    </header>
+
+    <div class="hud-panel">
+        <div class="hud-panel-header">
+            <span>SYS.STATUS</span>
+            <span>PORT: 5000</span>
+        </div>
+        <div class="status-badge">
+            <div class="status-dot"></div>
+            <span>SERVER_ONLINE // OPERATIONAL</span>
+        </div>
+        <div class="network-info" id="networkInfo">
+            <span style="color:var(--text-muted);">[NET_CONFIG] Hotspot Gateway: Check Tablet Wi-Fi Settings</span>
+        </div>
+    </div>
+
+    <div class="actions-grid">
+        <button class="btn-hud btn-calib" onclick="triggerCalib()">[SYS.CALIBRATE]</button>
+        <button class="btn-hud btn-full" onclick="openDashboard()">[VIEW.DASHBOARD]</button>
+    </div>
+
+    <div class="video-panel">
+        <div class="hud-panel-header" style="margin-bottom: 8px;">
+            <span>CAM.STREAM // <span onclick="reloadVideoStream()" style="cursor:pointer; color:var(--accent-cyan); font-weight:bold; text-decoration:underline;" title="Click to reload stream">LIVE</span></span>
+            <span style="color:var(--accent-amber);">EDGE_VISION</span>
+        </div>
+        <div class="video-wrapper" style="margin-bottom: 8px;">
+            <img id="videoStream" src="/api/video_feed" alt="Camera Stream Offline">
+            
+            <!-- Calibration Result Panel -->
+            <div id="calibResultPanel" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(12,16,29,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 20; text-align: center;">
+                <h3 style="color: var(--accent-cyan); margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 0.1em;">CALIBRATION COMPLETE</h3>
+                <div style="font-size: 1.1rem; margin-bottom: 5px; color: var(--text-main);">RMS Projection Error: <span id="resRms" style="font-weight: bold; font-family: 'JetBrains Mono', monospace;">0.0</span> px</div>
+                <div id="resQuality" style="font-size: 1.4rem; font-weight: bold; margin-bottom: 15px;">EXCELLENT</div>
+                <p style="color: var(--text-dim); font-size: 0.8rem; max-width: 80%; line-height: 1.4; margin-bottom: 15px;">
+                    <span style="color:#00ff00;">&lt; 0.5 (Excellent)</span> | <span style="color:var(--accent-amber);">0.5 ~ 1.0 (Good)</span> | <span style="color:#ff4444;">&gt; 1.0 (Poor)</span>
+                </p>
+                <button onclick="document.getElementById('calibResultPanel').style.display='none'; reloadVideoStream();" style="padding: 6px 14px; background: rgba(0, 243, 255, 0.1); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem;">CLOSE & RECONNECT</button>
+            </div>
+            
+            <div id="calibOverlay" class="calib-overlay">
+                <div class="calib-title">CALIBRATION IN PROGRESS</div>
+                <div class="calib-msg" id="calibMsg">Initializing...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="calibFill"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ANALYSIS CONSOLE -->
+        <div id="analysisConsole" style="background: rgba(12, 16, 29, 0.9); border: 1px solid var(--border-tech); border-radius: 4px; padding: 10px; display: none; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent-cyan);">
+            <div style="color: var(--accent-amber); font-weight: bold; margin-bottom: 6px;">[VISION ANALYSIS CONSOLE]</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>TARGET_BOARD:</span> <span style="color: #fff;">ChArUco / Chessboard (7x10)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>DETECTION_STATE:</span> <span id="acState" style="color: var(--accent-amber);">SEARCHING...</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>CORNERS_EXTRACTED:</span> <span id="acCorners" style="color: #fff;">0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>PROJECTION_ERROR:</span> <span id="acError" style="color: #fff;">N/A</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="log-container">
+        <div class="log-header">
+            <span>REALTIME_SYS_LOG // TTY</span>
+            <span id="scrollToggle" onclick="toggleAutoScroll()" style="cursor:pointer; color:var(--accent-cyan); font-weight:700;">AUTO_SCROLL: ON</span>
+        </div>
+        <div class="log-content" id="logContent">[SYS_INIT] Control HUD initialized.</div>
+    </div>
+
+    <script>
+        let autoScroll = true;
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.getElementById('scrollToggle');
+            if (autoScroll) {
+                btn.innerText = "AUTO_SCROLL: ON";
+                btn.style.color = "var(--accent-cyan)";
+                const c = document.getElementById('logContent');
+                c.scrollTop = c.scrollHeight;
+            } else {
+                btn.innerText = "AUTO_SCROLL: OFF";
+                btn.style.color = "var(--accent-amber)";
+            }
+        }
+
+        let calibPollInterval = null;
+
+        async function triggerCalib() {
+            log('[CALIB_REQ] Starting Auto Lens Calibration session...');
+            await fetch('/api/calibration/start', { method: 'POST' });
+            
+            // Show overlay
+            document.getElementById('calibOverlay').style.display = 'flex';
+            document.getElementById('calibMsg').innerText = "Hold board in front of camera...";
+            document.getElementById('calibFill').style.width = "0%";
+            
+            // Auto-reconnect video stream
+            const videoImg = document.getElementById('videoStream');
+            if (videoImg) {
+                videoImg.style.display = 'block';
+                videoImg.src = "/api/video_feed?t=" + new Date().getTime();
+                log("[SYS_CMD] CAM.STREAM activated for calibration.");
+            }
+            document.getElementById('calibResultPanel').style.display = 'none';
+            
+            if (calibPollInterval) clearInterval(calibPollInterval);
+            calibPollInterval = setInterval(pollCalibration, 500);
+        }
+
+        async function pollCalibration() {
+            try {
+                const res = await fetch('/api/calibration/status');
+                const data = await res.json();
+                
+                document.getElementById('calibFill').style.width = `${data.progress_percent}%`;
+                document.getElementById('calibMsg').innerText = data.instruction;
+                
+                // Update Analysis Console
+                document.getElementById('analysisConsole').style.display = data.active ? 'block' : 'none';
+                if (data.active) {
+                    const acState = document.getElementById('acState');
+                    if (data.board_found) {
+                        acState.innerText = "LOCKED (TRACKING)";
+                        acState.style.color = "#00ff00"; // Green
+                    } else {
+                        acState.innerText = "SEARCHING...";
+                        acState.style.color = "var(--accent-amber)";
+                    }
+                    document.getElementById('acCorners').innerText = data.corners_detected;
+                    document.getElementById('acError').innerText = data.rms_error > 0 ? data.rms_error.toFixed(3) : 'CALCULATING...';
+                }
+                
+                if (!data.active && data.progress_percent > 0) {
+                    clearInterval(calibPollInterval);
+                    log(`[CALIB_END] ${data.instruction}`);
+                    
+                    document.getElementById('calibOverlay').style.display = 'none';
+                    
+                    // Terminate LIVE stream and show evaluation
+                    const videoImg = document.getElementById('videoStream');
+                    if (videoImg) {
+                        videoImg.src = "";
+                        videoImg.style.display = 'none';
+                        log("[SYS_CMD] CAM.STREAM disconnected. Showing evaluation.");
+                    }
+                    
+                    // Update and show Result Panel
+                    const resRms = document.getElementById('resRms');
+                    const resQuality = document.getElementById('resQuality');
+                    const rms = data.rms_error;
+                    
+                    resRms.innerText = rms.toFixed(3);
+                    if (rms < 0.5) {
+                        resQuality.innerText = "EXCELLENT QUALITY 🌟";
+                        resQuality.style.color = "#00ff00";
+                    } else if (rms <= 1.0) {
+                        resQuality.innerText = "GOOD QUALITY 👍";
+                        resQuality.style.color = "var(--accent-amber)";
+                    } else {
+                        resQuality.innerText = "POOR QUALITY ⚠️";
+                        resQuality.style.color = "#ff4444";
+                    }
+                    
+                    document.getElementById('calibResultPanel').style.display = 'flex';
+                }
+            } catch (e) {}
+        }
+
+        function openDashboard() { window.location.href = '/'; }
+        
+        function toggleCard(contentId, iconId) {
+            const el = document.getElementById(contentId);
+            const icon = document.getElementById(iconId);
+            if (el.style.display === 'none' || el.style.display === '') {
+                el.style.display = 'block';
+                icon.innerText = '▲';
+            } else {
+                el.style.display = 'none';
+                icon.innerText = '▼';
+            }
+        }
+
+        function log(msg) {
+            const c = document.getElementById('logContent');
+            c.innerHTML += `<br>${msg}`;
+            if (autoScroll) c.scrollTop = c.scrollHeight;
+        }
+
+        async function pollServerLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                const data = await res.json();
+                if (data.logs && data.logs.length > 0) {
+                    const c = document.getElementById('logContent');
+                    c.innerHTML = data.logs.join('<br>');
+                    if (autoScroll) c.scrollTop = c.scrollHeight;
+                }
+            } catch (e) {}
+        }
+        
+        function reloadVideoStream() {
+            const videoImg = document.getElementById('videoStream');
+            if (videoImg) {
+                videoImg.style.display = 'block';
+                videoImg.src = "/api/video_feed?t=" + new Date().getTime();
+                log("[SYS_CMD] Triggered CAM.STREAM manual reload");
+            }
+            document.getElementById('calibResultPanel').style.display = 'none';
+        }
+
+        setInterval(pollServerLogs, 1000);
+    </script>
+</body>
+</html>
