@@ -21,7 +21,8 @@ import logging
 # Suppress /api/logs polling spam from Werkzeug access logger
 class QuietLogsFilter(logging.Filter):
     def filter(self, record):
-        return "/api/logs" not in record.getMessage()
+        msg = record.getMessage()
+        return "/api/logs" not in msg and "/api/view_marker/status" not in msg
 
 logging.getLogger("werkzeug").addFilter(QuietLogsFilter())
 
@@ -132,9 +133,13 @@ stream_lock = threading.Lock()
 latest_stream_frame = None
 
 active_streams = 0
+view_marker_active = False
+
+marker_lock = threading.Lock()
+current_marker_detections = []
 
 def bg_site_survey_worker():
-    global survey_state, latest_stream_frame
+    global survey_state, latest_stream_frame, view_marker_active
     
     import os
     cam_src = os.environ.get("CAMERA_SOURCE", "http://127.0.0.1:8081/video")
@@ -158,14 +163,32 @@ def bg_site_survey_worker():
     raw_lock = threading.Lock()
     
     def frame_grabber():
-        nonlocal latest_raw_frame, grabber_active
+        nonlocal latest_raw_frame, grabber_active, cap
+        retry_count = 0
         while grabber_active:
+            if cap is None or not cap.isOpened():
+                time.sleep(1.0)
+                retry_count += 1
+                try:
+                    cap = cv2.VideoCapture(cam_src)
+                    if cap.isOpened():
+                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        server_log_buffer.append(f"[{time.strftime('%H:%M:%S')}] [SYS_WARN] Camera Stream Reconnected (Attempts: {retry_count})")
+                        retry_count = 0
+                except:
+                    pass
+                continue
+
             ret, f = cap.read()
             if ret:
                 with raw_lock:
                     latest_raw_frame = f
+                retry_count = 0
             else:
-                time.sleep(0.01)
+                # Connection lost or EOF
+                if cap:
+                    cap.release()
+                time.sleep(0.5)
                 
         # Safely release cap from the same thread that reads it
         if cap and cap.isOpened():
@@ -226,6 +249,63 @@ def bg_site_survey_worker():
         # Draw ORB keypoints for visual feedback if survey is active
         if survey_state["active"]:
             cv2.drawKeypoints(frame, kp_orb, frame, color=(0, 255, 0), flags=0)
+            
+        # --- [VIEW.MARKER] AprilTag Overlay Logic (Mutually exclusive with CALIB) ---
+        if view_marker_active and not calib_mgr.active:
+            try:
+                aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
+                aruco_params = cv2.aruco.DetectorParameters()
+                
+                if hasattr(cv2.aruco, 'ArucoDetector'):
+                    detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
+                    corners, ids, rejected = detector.detectMarkers(gray)
+                else:
+                    corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
+                    
+                if ids is not None:
+                    marker_map = load_marker_map().get("markers", {})
+                    
+                    new_detections = []
+                    for i in range(len(ids)):
+                        marker_id = str(ids[i][0])
+                        c = corners[i][0]
+                        # Top-left corner for overlay positioning (percentage based on 640x360)
+                        cx_pct = float(c[0][0]) / 640.0
+                        cy_pct = float(c[0][1]) / 360.0
+                        
+                        det_info = {
+                            "id": marker_id,
+                            "x_pct": cx_pct,
+                            "y_pct": cy_pct,
+                            "registered": False
+                        }
+                        
+                        if marker_id in marker_map:
+                            cv2.polylines(frame, [c.astype(np.int32)], True, (0, 255, 0), 2)
+                            m = marker_map[marker_id]
+                            det_info.update({
+                                "registered": True,
+                                "name": m.get('location_name', ''),
+                                "x": m.get('x', 0),
+                                "y": m.get('y', 0),
+                                "z": m.get('z', 0),
+                                "roll": m.get('roll', 0),
+                                "pitch": m.get('pitch', 0),
+                                "yaw": m.get('yaw', 0)
+                            })
+                        else:
+                            cv2.polylines(frame, [c.astype(np.int32)], True, (0, 0, 255), 2)
+                        new_detections.append(det_info)
+                        
+                    with marker_lock:
+                        current_marker_detections.clear()
+                        current_marker_detections.extend(new_detections)
+                else:
+                    with marker_lock:
+                        current_marker_detections.clear()
+            except Exception as e:
+                pass
+
 
         with stream_lock:
             latest_stream_frame = frame.copy()
@@ -320,6 +400,25 @@ def get_telemetry():
 def get_server_logs():
     """Returns the latest server logs from the rolling buffer."""
     return jsonify({"logs": list(server_log_buffer)})
+
+@app.route('/api/view_marker/toggle', methods=['POST'])
+def toggle_view_marker():
+    """Toggles the AprilTag View Marker Mode on/off."""
+    global view_marker_active
+    view_marker_active = not view_marker_active
+    msg = "ON" if view_marker_active else "OFF"
+    
+    with marker_lock:
+        current_marker_detections.clear()
+        
+    server_log_buffer.append(f"[{time.strftime('%H:%M:%S')}] [SYS_CMD] VIEW.MARKER Mode toggled to {msg}")
+    return jsonify({"status": "SUCCESS", "active": view_marker_active})
+
+@app.route('/api/view_marker/status', methods=['GET'])
+def get_view_marker_status():
+    """Returns the currently detected markers."""
+    with marker_lock:
+        return jsonify({"detections": current_marker_detections})
 
 # --- AprilTag 6-DoF Marker Manager CRUD API Endpoints ---
 @app.route('/api/markers', methods=['GET'])

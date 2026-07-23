@@ -72,12 +72,14 @@
     </style>
 </head>
 <body>
-    <header>
-        <div>
-            <div class="sys-title">NEXUS-EDGE // CONTROL HUD</div>
-            <div class="sys-sub">S24 ULTRA EDGE COMPUTING NODE</div>
+    <header style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-tech); padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div class="sys-title" style="font-size: 1.4rem; background: linear-gradient(to right, var(--accent-cyan), var(--accent-emerald)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">NEXUS-EDGE // CONTROL HUD</div>
+            <div class="sys-sub">S24 ULTRA EDGE COMPUTING NODE v1.4.0</div>
         </div>
-        <div class="sys-sub">v1.4.0</div>
+        <div>
+            <button class="btn-hud" style="padding: 8px 16px; border-color: var(--accent-cyan); color: var(--accent-cyan); cursor: pointer;" onclick="openDashboard()">[VIEW.DASHBOARD]</button>
+        </div>
     </header>
 
     <div class="hud-panel">
@@ -96,7 +98,7 @@
 
     <div class="actions-grid">
         <button class="btn-hud btn-calib" onclick="triggerCalib()">[SYS.CALIBRATE]</button>
-        <button class="btn-hud btn-full" onclick="openDashboard()">[VIEW.DASHBOARD]</button>
+        <button class="btn-hud btn-full" id="btnViewMarker" onclick="toggleViewMarker()">[VIEW.MARKER]</button>
     </div>
 
     <div class="video-panel">
@@ -104,8 +106,11 @@
             <span>CAM.STREAM // <span onclick="reloadVideoStream()" style="cursor:pointer; color:var(--accent-cyan); font-weight:bold; text-decoration:underline;" title="Click to reload stream">LIVE</span></span>
             <span style="color:var(--accent-amber);">EDGE_VISION</span>
         </div>
-        <div class="video-wrapper" style="margin-bottom: 8px;">
+        <div class="video-wrapper" style="position: relative; margin-bottom: 8px;">
             <img id="videoStream" src="/api/video_feed" alt="Camera Stream Offline">
+            
+            <!-- Dynamic Marker DOM Overlay -->
+            <div id="markerOverlayContainer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; z-index: 5;"></div>
             
             <!-- Calibration Result Panel -->
             <div id="calibResultPanel" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(12,16,29,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 20; text-align: center;">
@@ -154,6 +159,120 @@
     </div>
 
     <script>
+        let isViewMarkerMode = false;
+        let markerPollInterval = null;
+
+        async function pollMarkers() {
+            if (!isViewMarkerMode) return;
+            try {
+                const res = await fetch('/api/view_marker/status');
+                const data = await res.json();
+                
+                const container = document.getElementById('markerOverlayContainer');
+                container.innerHTML = ''; // Clear old overlays
+                
+                if (data.detections && data.detections.length > 0) {
+                    data.detections.forEach(det => {
+                        const overlay = document.createElement('div');
+                        overlay.style.position = 'absolute';
+                        overlay.style.left = `${det.x_pct * 100}%`;
+                        overlay.style.top = `${det.y_pct * 100}%`;
+                        overlay.style.transform = 'translate(-50%, -100%)';
+                        overlay.style.background = 'rgba(12, 16, 29, 0.85)';
+                        overlay.style.border = det.registered ? '1px solid var(--accent-emerald)' : '1px solid #ff4444';
+                        overlay.style.borderRadius = '4px';
+                        overlay.style.padding = '6px';
+                        overlay.style.color = '#fff';
+                        overlay.style.fontSize = '0.7rem';
+                        overlay.style.whiteSpace = 'nowrap';
+                        overlay.style.pointerEvents = 'none';
+                        overlay.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
+                        
+                        if (det.registered) {
+                            overlay.innerHTML = `
+                                <div style="color:var(--accent-emerald); font-weight:bold; margin-bottom:2px; font-size:0.75rem;">ID: ${det.id} <span style="color:#aaa;font-size:0.6rem;">${det.name || ''}</span></div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:0.65rem;">
+                                    <span>X: ${det.x}</span><span>R: ${det.roll}°</span>
+                                    <span>Y: ${det.y}</span><span>P: ${det.pitch}°</span>
+                                    <span>Z: ${det.z}</span><span>Y: ${det.yaw}°</span>
+                                </div>
+                            `;
+                        } else {
+                            overlay.innerHTML = `<div style="color:#ff4444; font-weight:bold;">ID: ${det.id} (UNREGISTERED)</div>`;
+                        }
+                        container.appendChild(overlay);
+                        
+                        // Prevent overlay from going out of bounds
+                        const rect = overlay.getBoundingClientRect();
+                        const contRect = container.getBoundingClientRect();
+                        let shiftX = 0;
+                        let shiftY = 0;
+                        
+                        if (rect.left < contRect.left) {
+                            shiftX = contRect.left - rect.left + 5;
+                        } else if (rect.right > contRect.right) {
+                            shiftX = contRect.right - rect.right - 5;
+                        }
+                        
+                        if (rect.top < contRect.top) {
+                            shiftY = contRect.top - rect.top + 5;
+                        } else if (rect.bottom > contRect.bottom) {
+                            shiftY = contRect.bottom - rect.bottom - 5;
+                        }
+                        
+                        if (shiftX !== 0 || shiftY !== 0) {
+                            overlay.style.transform = `translate(calc(-50% + ${shiftX}px), calc(-100% + ${shiftY}px))`;
+                        }
+                    });
+                }
+            } catch (e) {
+                // Ignore silent poll errors
+            }
+        }
+
+        async function toggleViewMarker() {
+            // Prevent toggling during calibration
+            if (document.getElementById('calibOverlay').style.display === 'flex') {
+                alert('캘리브레이션 중에는 마커 뷰 모드를 켤 수 없습니다.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/view_marker/toggle', {method: 'POST'});
+                const data = await res.json();
+                isViewMarkerMode = data.active;
+                
+                const btn = document.getElementById('btnViewMarker');
+                const overlayContainer = document.getElementById('markerOverlayContainer');
+                
+                if (isViewMarkerMode) {
+                    btn.style.borderColor = 'var(--accent-emerald)';
+                    btn.style.color = 'var(--accent-emerald)';
+                    btn.style.background = 'rgba(0, 255, 102, 0.15)';
+                    btn.innerText = '[VIEW.MARKER: ON]';
+                    overlayContainer.style.display = 'block';
+                    log("[SYS] VIEW.MARKER Mode ON - Target: AprilTag");
+                    if (markerPollInterval) clearInterval(markerPollInterval);
+                    markerPollInterval = setInterval(pollMarkers, 200); // Poll at 5Hz
+                } else {
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                    btn.style.background = '';
+                    btn.innerText = '[VIEW.MARKER]';
+                    overlayContainer.style.display = 'none';
+                    overlayContainer.innerHTML = '';
+                    if (markerPollInterval) {
+                        clearInterval(markerPollInterval);
+                        markerPollInterval = null;
+                    }
+                    log("[SYS] VIEW.MARKER Mode OFF");
+                }
+            } catch (err) {
+                console.error("Failed to toggle marker mode", err);
+                log("[SYS_ERR] Failed to communicate with server");
+            }
+        }
+
         let autoScroll = true;
 
         function toggleAutoScroll() {
@@ -173,6 +292,12 @@
         let calibPollInterval = null;
 
         async function triggerCalib() {
+            // Force disable marker view to prevent conflict
+            if (isViewMarkerMode) {
+                log('[SYS_WARN] Disabling VIEW.MARKER for Calibration...');
+                await toggleViewMarker(); // Safely toggle off
+            }
+
             log('[CALIB_REQ] Starting Auto Lens Calibration session...');
             await fetch('/api/calibration/start', { method: 'POST' });
             

@@ -108,9 +108,9 @@
             <h1>NEXUS-EDGE // SETUP A <span>[VISUAL_SLAM_TELEMETRY]</span></h1>
         </div>
         <div class="header-actions">
+            <button class="btn-action" id="btnSurveyMode" onclick="toggleSurvey()">[SURVEY.MODE]</button>
             <button class="btn-action btn-tag-mgr" onclick="openMarkerModal()">[MARKER.MANAGER]</button>
-            <button class="btn-action btn-calib" onclick="openCalibModal()">[SYS.CALIBRATE]</button>
-            <button class="btn-action" onclick="toggleSurvey()">[SURVEY.MODE]</button>
+            <button class="btn-action btn-calib" onclick="window.location.href='/control'">[SYS.CALIBRATE]</button>
         </div>
     </header>
 
@@ -182,10 +182,12 @@
                     <input type="text" id="mSize" class="form-input" placeholder="0.16">
                 </div>
             </div>
-            <div class="form-grid">
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr;">
                 <div class="form-group"><div class="form-label">X (m)</div><input type="text" id="mX" class="form-input" placeholder="0.0"></div>
                 <div class="form-group"><div class="form-label">Y (m)</div><input type="text" id="mY" class="form-input" placeholder="0.0"></div>
                 <div class="form-group"><div class="form-label">Z (m)</div><input type="text" id="mZ" class="form-input" placeholder="0.0"></div>
+            </div>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr;">
                 <div class="form-group"><div class="form-label">Roll (°)</div><input type="text" id="mRoll" class="form-input" placeholder="0.0"></div>
                 <div class="form-group"><div class="form-label">Pitch (°)</div><input type="text" id="mPitch" class="form-input" placeholder="0.0"></div>
                 <div class="form-group"><div class="form-label">Yaw (°)</div><input type="text" id="mYaw" class="form-input" placeholder="0.0"></div>
@@ -225,6 +227,25 @@
             originX = canvas.width / 2; originY = canvas.height / 2; drawMap();
         }
         window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+        let isSurveyMode = false;
+        function toggleSurvey() {
+            isSurveyMode = !isSurveyMode;
+            const btn = document.getElementById('btnSurveyMode');
+            if (isSurveyMode) {
+                btn.style.borderColor = 'var(--accent-emerald)';
+                btn.style.color = 'var(--accent-emerald)';
+                btn.style.background = 'rgba(0, 255, 102, 0.15)';
+                btn.innerText = '[SURVEY.MODE: ON]';
+                console.log("[SYS] Survey Mode ON");
+            } else {
+                btn.style.borderColor = '';
+                btn.style.color = '';
+                btn.style.background = '';
+                btn.innerText = '[SURVEY.MODE]';
+                console.log("[SYS] Survey Mode OFF");
+            }
+        }
 
         async function fetchMarkers() {
             try {
@@ -303,18 +324,18 @@
 
         async function saveMarkerFromForm() {
             const id = document.getElementById('mTagId').value.trim();
-            if (!id) { alert('Please enter Tag ID'); return; }
+            if (!id) return;
             
             const payload = {
                 tag_id: id,
                 location_name: document.getElementById('mName').value,
-                x: parseFloat(document.getElementById('mX').value),
-                y: parseFloat(document.getElementById('mY').value),
-                z: parseFloat(document.getElementById('mZ').value),
-                roll: parseFloat(document.getElementById('mRoll').value),
-                pitch: parseFloat(document.getElementById('mPitch').value),
-                yaw: parseFloat(document.getElementById('mYaw').value),
-                size_meters: parseFloat(document.getElementById('mSize').value)
+                x: parseFloat(document.getElementById('mX').value) || 0,
+                y: parseFloat(document.getElementById('mY').value) || 0,
+                z: parseFloat(document.getElementById('mZ').value) || 0,
+                roll: parseFloat(document.getElementById('mRoll').value) || 0,
+                pitch: parseFloat(document.getElementById('mPitch').value) || 0,
+                yaw: parseFloat(document.getElementById('mYaw').value) || 0,
+                size_meters: parseFloat(document.getElementById('mSize').value) || 0.16
             };
 
             await fetch('/api/markers', {
@@ -324,7 +345,8 @@
             });
 
             fetchMarkers();
-            alert(`[SYS_MSG] AprilTag 6-DoF Marker #${id} saved successfully!`);
+            // Automatically close the modal for better UX after saving without an alert
+            closeMarkerModal();
         }
 
         async function deleteMarker(id) {
