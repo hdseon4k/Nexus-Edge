@@ -23,7 +23,7 @@ class AutoCalibrationManager:
         self.rms_error = 0.0
         
         self.last_capture_time = 0
-        self.capture_delay = 1.0  # 1 second delay between automatic captures
+        self.capture_delay = 1.5  # 1.5 seconds delay between automatic captures (20 frames over 30s)
         
         # Board settings (ChArUco 7x10)
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
