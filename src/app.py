@@ -22,7 +22,7 @@ import logging
 class QuietLogsFilter(logging.Filter):
     def filter(self, record):
         msg = record.getMessage()
-        return "/api/logs" not in msg and "/api/view_marker/status" not in msg
+        return not any(ep in msg for ep in ["/api/logs", "/api/view_marker/status", "/api/telemetry", "/api/survey/status"])
 
 logging.getLogger("werkzeug").addFilter(QuietLogsFilter())
 
@@ -138,6 +138,59 @@ view_marker_active = False
 marker_lock = threading.Lock()
 current_marker_detections = []
 
+# --- Real 6-DoF Telemetry State ---
+latest_telemetry = {
+    "x": 0.0, "y": 0.0, "z": 0.0,
+    "roll": 0.0, "pitch": 0.0, "yaw": 0.0,
+    "last_tag": "None"
+}
+telemetry_lock = threading.Lock()
+
+CAMERA_CALIB_PATH = "config/camera_calibration.json"
+camera_K = np.array([[1150.0, 0.0, 960.0], [0.0, 1150.0, 540.0], [0.0, 0.0, 1.0]], dtype=np.float32)
+camera_dist = np.zeros((5, 1), dtype=np.float32)
+
+def load_camera_calibration():
+    global camera_K, camera_dist
+    if os.path.exists(CAMERA_CALIB_PATH):
+        try:
+            with open(CAMERA_CALIB_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                camera_K = np.array(data.get("K", camera_K), dtype=np.float32)
+                camera_dist = np.array(data.get("dist_coeffs", camera_dist), dtype=np.float32)
+        except Exception:
+            pass
+load_camera_calibration()
+
+import math
+def get_tag_3d_corners(x, y, z, roll, pitch, yaw, size):
+    s2 = size / 2.0
+    local_corners = np.array([
+        [-s2, -s2, 0], [ s2, -s2, 0], [ s2,  s2, 0], [-s2,  s2, 0]
+    ], dtype=np.float32)
+    rx = np.radians(roll)
+    ry = np.radians(pitch)
+    rz = np.radians(yaw)
+    R_x = np.array([[1, 0, 0], [0, math.cos(rx), -math.sin(rx)], [0, math.sin(rx), math.cos(rx)]], dtype=np.float32)
+    R_y = np.array([[math.cos(ry), 0, math.sin(ry)], [0, 1, 0], [-math.sin(ry), 0, math.cos(ry)]], dtype=np.float32)
+    R_z = np.array([[math.cos(rz), -math.sin(rz), 0], [math.sin(rz), math.cos(rz), 0], [0, 0, 1]], dtype=np.float32)
+    R = R_z @ R_y @ R_x
+    world_corners = [(R @ pt + np.array([x, y, z], dtype=np.float32)) for pt in local_corners]
+    return world_corners
+
+def rotationMatrixToEulerAngles(R):
+    sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+    singular = sy < 1e-6
+    if not singular:
+        x = math.atan2(R[2,1] , R[2,2])
+        y = math.atan2(-R[2,0], sy)
+        z = math.atan2(R[1,0], R[0,0])
+    else:
+        x = math.atan2(-R[1,2], R[1,1])
+        y = math.atan2(-R[2,0], sy)
+        z = 0
+    return np.degrees(np.array([x, y, z])) # roll, pitch, yaw
+
 def bg_site_survey_worker():
     global survey_state, latest_stream_frame, view_marker_active
     
@@ -197,6 +250,14 @@ def bg_site_survey_worker():
     t_grabber = threading.Thread(target=frame_grabber, daemon=True)
     t_grabber.start()
 
+    def smooth_angle(old, new, alpha=0.3):
+        if old is None: return new
+        diff = (new - old + 180) % 360 - 180
+        return old + alpha * diff
+
+    prev_t_wc = None
+    prev_euler = None
+
     idle_time = 0
     while True:
         with survey_lock:
@@ -246,12 +307,13 @@ def bg_site_survey_worker():
         num_fast = len(kp_fast)
         frames += 1
 
-        # Draw ORB keypoints for visual feedback if survey is active
+        # Draw ORB and FAST keypoints for visual feedback if survey is active
         if survey_state["active"]:
+            cv2.drawKeypoints(frame, kp_fast, frame, color=(255, 255, 0), flags=0)
             cv2.drawKeypoints(frame, kp_orb, frame, color=(0, 255, 0), flags=0)
             
         # --- [VIEW.MARKER] AprilTag Overlay Logic (Mutually exclusive with CALIB) ---
-        if view_marker_active and not calib_mgr.active:
+        if (view_marker_active or survey_state["active"]) and not calib_mgr.active:
             try:
                 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
                 aruco_params = cv2.aruco.DetectorParameters()
@@ -266,6 +328,10 @@ def bg_site_survey_worker():
                     marker_map = load_marker_map().get("markers", {})
                     
                     new_detections = []
+                    obj_points = []
+                    img_points = []
+                    last_valid_tag = latest_telemetry["last_tag"]
+                    
                     for i in range(len(ids)):
                         marker_id = str(ids[i][0])
                         c = corners[i][0]
@@ -293,18 +359,72 @@ def bg_site_survey_worker():
                                 "pitch": m.get('pitch', 0),
                                 "yaw": m.get('yaw', 0)
                             })
+                            last_valid_tag = f"Tag #{marker_id} ({det_info['name']})"
+                            
+                            world_pts = get_tag_3d_corners(m['x'], m['y'], m['z'], m.get('roll',0), m.get('pitch',0), m.get('yaw',0), m.get('size_meters',0.135))
+                            obj_points.extend(world_pts)
+                            img_points.extend(c)
                         else:
                             cv2.polylines(frame, [c.astype(np.int32)], True, (0, 0, 255), 2)
                         new_detections.append(det_info)
                         
+                    # Calculate PnP if we have valid points
+                    if len(obj_points) >= 4:
+                        obj_points = np.array(obj_points, dtype=np.float32)
+                        img_points = np.array(img_points, dtype=np.float32)
+                        
+                        # Scale K for 640x360 frame
+                        K_scaled = camera_K.copy()
+                        K_scaled[0, :] *= (640.0 / 1920.0)
+                        K_scaled[1, :] *= (360.0 / 1080.0)
+                        
+                        if len(obj_points) == 4:
+                            ret, rvec, tvec = cv2.solvePnP(obj_points, img_points, K_scaled, camera_dist, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                        else:
+                            ret, rvec, tvec = cv2.solvePnP(obj_points, img_points, K_scaled, camera_dist, flags=cv2.SOLVEPNP_ITERATIVE)
+                            
+                        if ret:
+                            R_cw, _ = cv2.Rodrigues(rvec)
+                            R_wc = R_cw.T
+                            t_wc = -R_wc @ tvec
+                            euler = rotationMatrixToEulerAngles(R_wc)
+                            
+                            # EMA Smoothing
+                            alpha_pos = 0.5
+                            alpha_ang = 0.25
+                            if prev_t_wc is None:
+                                prev_t_wc = t_wc
+                                prev_euler = euler
+                            else:
+                                prev_t_wc = prev_t_wc + alpha_pos * (t_wc - prev_t_wc)
+                                prev_euler = [smooth_angle(prev_euler[i], euler[i], alpha_ang) for i in range(3)]
+                            
+                            with telemetry_lock:
+                                latest_telemetry["x"] = round(float(prev_t_wc[0, 0] if prev_t_wc.ndim > 1 else prev_t_wc[0]), 2)
+                                latest_telemetry["y"] = round(float(prev_t_wc[1, 0] if prev_t_wc.ndim > 1 else prev_t_wc[1]), 2)
+                                latest_telemetry["z"] = round(float(prev_t_wc[2, 0] if prev_t_wc.ndim > 1 else prev_t_wc[2]), 2)
+                                latest_telemetry["roll"] = round(float(prev_euler[0]), 1)
+                                latest_telemetry["pitch"] = round(float(prev_euler[1]), 1)
+                                latest_telemetry["yaw"] = round(float(prev_euler[2]), 1)
+                                latest_telemetry["last_tag"] = last_valid_tag
+
+                        
                     with marker_lock:
                         current_marker_detections.clear()
                         current_marker_detections.extend(new_detections)
+                        
+                    if len(obj_points) < 4:
+                        prev_t_wc = None
+                        prev_euler = None
                 else:
                     with marker_lock:
                         current_marker_detections.clear()
+                    prev_t_wc = None
+                    prev_euler = None
             except Exception as e:
-                pass
+                import traceback
+                print(f"[ERROR in bg_site_survey_worker]: {e}")
+                traceback.print_exc()
 
 
         with stream_lock:
@@ -384,16 +504,22 @@ def mobile_control_center():
 
 @app.route('/api/telemetry')
 def get_telemetry():
+    with telemetry_lock:
+        data = dict(latest_telemetry)
+        
     return jsonify({
         "status": "ONLINE",
         "node": "Galaxy S24 Ultra Edge",
         "timestamp": time.time(),
         "position": {
-            "x": round(2.45 + (np.random.rand() - 0.5) * 0.1, 2),
-            "y": round(1.12 + (np.random.rand() - 0.5) * 0.1, 2),
-            "z": 1.20
+            "x": data["x"],
+            "y": data["y"],
+            "z": data["z"],
+            "roll": data["roll"],
+            "pitch": data["pitch"],
+            "yaw": data["yaw"]
         },
-        "last_tag": "Tag #0 (Entrance)"
+        "last_tag": data["last_tag"]
     })
 
 @app.route('/api/logs')

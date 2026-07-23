@@ -4,32 +4,32 @@
     "0": {
       "x": 0.0,
       "y": 0.0,
-      "z": 1.2,
+      "z": 0.0,
       "roll": 0.0,
-      "pitch": 0.0,
+      "pitch": 90.0,
       "yaw": 0.0,
-      "size_meters": 0.15,
-      "location_name": "Zone A Entrance Marker #0"
+      "size_meters": 0.135,
+      "location_name": "Origin Floor Marker #0"
     },
     "1": {
-      "x": 5.0,
+      "x": 1.0,
       "y": 0.0,
-      "z": 1.2,
+      "z": 0.0,
       "roll": 0.0,
-      "pitch": 0.0,
+      "pitch": 90.0,
       "yaw": 0.0,
-      "size_meters": 0.15,
-      "location_name": "Corridor Pillar #1"
+      "size_meters": 0.135,
+      "location_name": "Right Floor Marker #1"
     },
     "2": {
-      "x": 10.0,
-      "y": 3.0,
-      "z": 1.5,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 1.0,
       "roll": 0.0,
-      "pitch": 0.0,
-      "yaw": 90.0,
-      "size_meters": 0.15,
-      "location_name": "Rack Corner #2"
+      "pitch": 90.0,
+      "yaw": 0.0,
+      "size_meters": 0.135,
+      "location_name": "Forward Floor Marker #2"
     }
   }
 }

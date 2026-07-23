@@ -124,17 +124,28 @@
                 <div class="card-title">LIVE TELEMETRY // 6-DOF</div>
                 <div class="telemetry-grid">
                     <div class="telemetry-item"><div class="telemetry-label">POS_X (M)</div><div class="telemetry-value" id="valX">0.00</div></div>
+                    <div class="telemetry-item"><div class="telemetry-label">ROLL (°)</div><div class="telemetry-value" id="valRoll">0.0</div></div>
                     <div class="telemetry-item"><div class="telemetry-label">POS_Y (M)</div><div class="telemetry-value" id="valY">0.00</div></div>
+                    <div class="telemetry-item"><div class="telemetry-label">PITCH (°)</div><div class="telemetry-value" id="valPitch">0.0</div></div>
                     <div class="telemetry-item"><div class="telemetry-label">POS_Z (M)</div><div class="telemetry-value" id="valZ">0.00</div></div>
-                    <div class="telemetry-item"><div class="telemetry-label">TAG_COUNT</div><div class="telemetry-value" id="valAnchorCount">0 Tags</div></div>
+                    <div class="telemetry-item"><div class="telemetry-label">YAW (°)</div><div class="telemetry-value" id="valYaw">0.0</div></div>
+                    <div class="telemetry-item" style="grid-column: span 2;"><div class="telemetry-label">VISIBLE TAGS</div><div class="telemetry-value" id="valVisibleTags">0 Tags</div></div>
                 </div>
             </div>
 
-            <div class="info-card">
-                <div class="card-title">SYSTEM STATUS // NODE</div>
-                <div class="telemetry-grid">
-                    <div class="telemetry-item"><div class="telemetry-label">LAST_SEEN_TAG</div><div class="telemetry-value" style="font-size:0.85rem; color:#E2E8F0;" id="valLastTag">TAG #0</div></div>
-                    <div class="telemetry-item"><div class="telemetry-label">STATE</div><div class="telemetry-value" style="font-size:0.85rem; color:var(--accent-emerald);">ONLINE</div></div>
+            <div class="info-card" id="surveyCard" style="display: none; border-left-color: var(--accent-emerald); padding: 12px;">
+                <div class="card-title" style="color: var(--accent-emerald); margin-bottom: 8px;">SURVEY PROFILING // STATUS</div>
+                
+                <div style="position: relative; width: 100%; border: 1px solid var(--border-tech); border-radius: 2px; overflow: hidden; margin-bottom: 8px; background: #000;">
+                    <img id="surveyVideo" src="" style="width: 100%; display: block; object-fit: contain; min-height: 120px;">
+                    <div style="position: absolute; top: 0; left: 0; width: 100%; padding: 6px 8px; background: rgba(12, 16, 29, 0.75); display: flex; justify-content: space-between; font-size: 0.65rem; border-bottom: 1px solid rgba(0, 242, 254, 0.2);">
+                        <div><span style="color: var(--text-muted);">QUALITY: </span><span id="surveyQuality" style="font-weight: 700;">SCANNING</span></div>
+                        <div><span style="color: var(--text-muted);">ORB: </span><span id="surveyOrb" style="color: var(--accent-cyan); font-weight: 700;">0</span></div>
+                    </div>
+                </div>
+                
+                <div style="font-size: 0.7rem; color: var(--accent-amber); line-height: 1.4;" id="surveyRecom">
+                    Scanning environment features...
                 </div>
             </div>
         </div>
@@ -179,7 +190,7 @@
                 </div>
                 <div class="form-group">
                     <div class="form-label">Size (m)</div>
-                    <input type="text" id="mSize" class="form-input" placeholder="0.16">
+                    <input type="text" id="mSize" class="form-input" placeholder="0.135">
                 </div>
             </div>
             <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr;">
@@ -221,6 +232,7 @@
         const canvas = document.getElementById('mapCanvas');
         const ctx = canvas.getContext('2d');
         let trajectory = [], zoom = 30, originX, originY, anchors = [];
+        let latestCamera = null;
 
         function resizeCanvas() {
             canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight;
@@ -229,21 +241,56 @@
         window.addEventListener('resize', resizeCanvas); resizeCanvas();
 
         let isSurveyMode = false;
-        function toggleSurvey() {
+        let surveyInterval = null;
+
+        async function toggleSurvey() {
             isSurveyMode = !isSurveyMode;
             const btn = document.getElementById('btnSurveyMode');
+            const surveyCard = document.getElementById('surveyCard');
+
             if (isSurveyMode) {
                 btn.style.borderColor = 'var(--accent-emerald)';
                 btn.style.color = 'var(--accent-emerald)';
                 btn.style.background = 'rgba(0, 255, 102, 0.15)';
                 btn.innerText = '[SURVEY.MODE: ON]';
+                surveyCard.style.display = 'block';
+                document.getElementById('surveyVideo').src = "/api/video_feed?t=" + new Date().getTime();
                 console.log("[SYS] Survey Mode ON");
+
+                await fetch('/api/survey/start', { method: 'POST' });
+
+                surveyInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch('/api/survey/status');
+                        const data = await res.json();
+
+                        document.getElementById('surveyOrb').innerText = data.avg_orb || 0;
+                        const qStatus = data.quality_status || 'SCANNING';
+                        document.getElementById('surveyQuality').innerText = qStatus;
+                        document.getElementById('surveyRecom').innerText = data.recommendation || 'Scanning...';
+
+                        // Update color based on quality
+                        let qColor = 'var(--text-main)';
+                        if (qStatus === 'EXCELLENT') qColor = 'var(--accent-emerald)';
+                        else if (qStatus === 'MODERATE') qColor = 'var(--accent-amber)';
+                        else if (qStatus === 'POOR') qColor = 'var(--accent-crimson)';
+                        document.getElementById('surveyQuality').style.color = qColor;
+                    } catch(e) {}
+                }, 1000);
             } else {
                 btn.style.borderColor = '';
                 btn.style.color = '';
                 btn.style.background = '';
                 btn.innerText = '[SURVEY.MODE]';
+                surveyCard.style.display = 'none';
+                document.getElementById('surveyVideo').src = "";
                 console.log("[SYS] Survey Mode OFF");
+
+                if (surveyInterval) {
+                    clearInterval(surveyInterval);
+                    surveyInterval = null;
+                }
+                await fetch('/api/survey/stop', { method: 'POST' });
             }
         }
 
@@ -259,7 +306,7 @@
                     Object.keys(data.markers).forEach(id => {
                         const m = data.markers[id];
                         const roll = m.roll || 0.0, pitch = m.pitch || 0.0, yaw = m.yaw || 0.0;
-                        anchors.push({x: m.x, y: m.y, id: `#${id}`, name: m.location_name});
+                        anchors.push({x: m.x, y: m.y, z: m.z, id: `#${id}`, name: m.location_name});
                         
                         tbody.innerHTML += `
                             <tr>
@@ -278,7 +325,6 @@
                             </tr>
                         `;
                     });
-                    document.getElementById('valAnchorCount').innerText = `${anchors.length} Tags`;
                 }
                 drawMap();
             } catch(e) {}
@@ -298,13 +344,46 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
             }
 
-            // Render anchors
+            // Render anchors (X-Z Plane Floor Plan)
             anchors.forEach(a => {
-                const cx = originX + a.x * zoom, cy = originY - a.y * zoom;
+                // +X is Right, +Z is Forward. On canvas, -cy is UP. 
+                const cx = originX + a.x * zoom, cy = originY - a.z * zoom;
                 ctx.fillStyle = 'rgba(0, 242, 254, 0.15)'; ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
                 ctx.strokeStyle = '#00F2FE'; ctx.lineWidth = 1.5; ctx.stroke();
                 ctx.fillStyle = '#E2E8F0'; ctx.font = '10px "JetBrains Mono"'; ctx.fillText(`TAG ${a.id}`, cx - 14, cy - 14);
             });
+
+            // Render Camera
+            if (latestCamera) {
+                const camX = originX + latestCamera.x * zoom;
+                const camY = originY - latestCamera.z * zoom;
+                
+                ctx.save();
+                ctx.translate(camX, camY);
+                // World Frame: +X Right, +Z Forward. Yaw is rotation around +Y (Down).
+                // Positive Yaw = turning Right.
+                ctx.rotate(latestCamera.yaw * Math.PI / 180);
+                
+                // Draw Camera as a triangle pointing UP (Forward in local frame)
+                ctx.beginPath();
+                ctx.moveTo(0, -14);  // Tip
+                ctx.lineTo(8, 8);    // Bottom Right
+                ctx.lineTo(0, 4);    // Bottom Center
+                ctx.lineTo(-8, 8);   // Bottom Left
+                ctx.closePath();
+                
+                ctx.fillStyle = 'rgba(255, 179, 0, 0.9)'; // Amber
+                ctx.fill();
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                
+                // Glow effect
+                ctx.shadowColor = '#FFB300';
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.restore();
+            }
         }
 
         function openMarkerModal() { fetchMarkers(); document.getElementById('markerModal').style.display = 'flex'; }
@@ -335,7 +414,7 @@
                 roll: parseFloat(document.getElementById('mRoll').value) || 0,
                 pitch: parseFloat(document.getElementById('mPitch').value) || 0,
                 yaw: parseFloat(document.getElementById('mYaw').value) || 0,
-                size_meters: parseFloat(document.getElementById('mSize').value) || 0.16
+                size_meters: parseFloat(document.getElementById('mSize').value) || 0.135
             };
 
             await fetch('/api/markers', {
@@ -358,6 +437,36 @@
         function openCalibModal() { document.getElementById('calibModal').style.display = 'flex'; }
         function closeCalibModal() { document.getElementById('calibModal').style.display = 'none'; }
         fetchMarkers();
+
+        // Start Telemetry & Visible Tags Polling
+        setInterval(async () => {
+            try {
+                // Fetch 6-DoF Position
+                const res = await fetch('/api/telemetry');
+                const data = await res.json();
+                document.getElementById('valX').innerText = data.position.x.toFixed(2);
+                document.getElementById('valY').innerText = data.position.y.toFixed(2);
+                document.getElementById('valZ').innerText = data.position.z.toFixed(2);
+                document.getElementById('valRoll').innerText = data.position.roll.toFixed(1);
+                document.getElementById('valPitch').innerText = data.position.pitch.toFixed(1);
+                document.getElementById('valYaw').innerText = data.position.yaw.toFixed(1);
+
+                // Fetch Visible Tags Count
+                const resStatus = await fetch('/api/view_marker/status');
+                const statusData = await resStatus.json();
+                const visibleCount = (statusData.detections && statusData.detections.length) ? statusData.detections.length : 0;
+                document.getElementById('valVisibleTags').innerText = `${visibleCount} Tags`;
+
+                // Update Camera State and Redraw Map
+                latestCamera = {
+                    x: data.position.x,
+                    y: data.position.y,
+                    z: data.position.z,
+                    yaw: data.position.yaw
+                };
+                drawMap();
+            } catch(e) {}
+        }, 100); // 100ms interval for smoother rendering
     </script>
 </body>
 </html>

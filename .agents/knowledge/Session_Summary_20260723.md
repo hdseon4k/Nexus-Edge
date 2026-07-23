@@ -1,27 +1,28 @@
-# Session Summary: 2026-07-23 (Setup A - Edge Vision & UI Infrastructure)
+# Session Summary: 6-DoF Telemetry and PnP Implementation (2026-07-23)
 
-## 1. Tactical HUD & UI Improvements (`src/static/control_ui.html`)
-- **Theme**: Applied a Cybernetic / Tactical Engineering HUD design using `JetBrains Mono` and `Share Tech Mono` fonts, with Cyan/Amber accents.
-- **Log Monitor**: Built a real-time log viewer container intercepting the backend stdout/stderr. Added `AUTO_SCROLL` toggle functionality.
-- **Responsive Layout**: Replaced rigid `100vh` body lock with a `min-height` flow and customized the main browser scrollbar to match the HUD aesthetics.
-- **Video Panel**: Embedded a live MJPEG stream panel (`/api/video_feed`). Limited max height to `35vh` to prevent oversized video on ultra-wide desktop monitors while keeping 100% width on vertical smartphones.
-- **Calibration Overlay**: Added an animated, translucent Progress Bar overlay directly on top of the video stream that polls `/api/calibration/status`.
-- **Pre-Flight Checklist (Hardware Preset)**: Implemented an expandable alert card detailing the ActionCam's required hardware preset: 1080p 60fps, 1/250s Shutter Speed, MF, and explicitly warning against AI Auto-Framing. 
+## Overview
+This session focused on replacing dummy telemetry data with a fully functional 6-DoF camera pose estimation pipeline using AprilTag markers, as well as enhancing the HUD UI to provide a real-time site survey profiler and dynamic map visualization.
 
-## 2. Zero-Latency Camera Architecture (`src/app.py`)
-- **Multi-Threaded Frame Grabber**: Introduced a dedicated thread solely for pulling frames from the MJPEG stream (`127.0.0.1:8081`). This completely bypasses the OpenCV buffer buildup issue, guaranteeing the analysis thread always pulls the absolute latest frame.
-- **Performance Downscaling**: Before passing the frame to the heavy `cv2.findChessboardCorners` or `cv2.ORB_create()` functions, the frame is actively downscaled from 1920x1080 to 640x360. This reduced the pixel workload to ~11% (1/9th), solving the S24 Ultra's CPU throttling and ensuring snappy UI updates.
-- **MJPEG Generator**: Created a generator thread that streams the latest frame (with ORB points and calibration UI drawn over it) back to the browser without re-resizing the already downscaled frame, saving additional CPU cycles.
+## Key Implementations
 
-## 3. Log Interception & System Diagnostics
-- **LogInterceptor**: Rerouted `sys.stdout` and `sys.stderr` to capture Python print statements and exceptions.
-- **OS-Level FD Redirection**: Re-opened file descriptor `2` (STDERR) via `os.dup2` to an anonymous pipe to capture low-level C++ errors originating from `libav` (FFmpeg) and `OpenCV`.
-- **ANSI Stripping**: Implemented a regex filter to clean up raw terminal color codes before sending them via the HTTP JSON `/api/telemetry` endpoint.
+### 1. PnP 6-DoF Pose Estimation
+- **Camera Calibration Integration**: Loaded intrinsic matrix ($K$) and distortion coefficients ($D$) from `camera_calibration.json`. Implemented dynamic scaling of $K$ to match the downscaled 640x360 processing resolution.
+- **3D World Mapping**: Created `get_tag_3d_corners()` to mathematically map the 4 corners of any recognized AprilTag into the global World Coordinate System using ZYX Euler rotations.
+- **`cv2.solvePnP` Application**: Integrated `solvePnP` to calculate the camera's rotational and translational vectors relative to the world frame. 
 
-## 4. Hardware Optimization Strategy (ADR)
-- Drafted `production_hardware_roadmap.md` outlining the roadmap for transitioning from Termux (Python) to Android Native (C++/Kotlin).
-- Detailed the role of **NPU** (NNAPI for YOLO/Deep Learning), **GPU** (OpenCL/Vulkan for pre-processing/downscaling), and **CPU** (NEON SIMD for SLAM coordinate math).
+### 2. Jitter Reduction and Smoothing
+- **IPPE_SQUARE Algorithm**: Upgraded the solver flag from `SOLVEPNP_ITERATIVE` to `SOLVEPNP_IPPE_SQUARE` when exactly 4 points (one tag) are visible. This effectively eliminated the severe planar pose ambiguity problem.
+- **Exponential Moving Average (EMA) Filter**: Implemented a software damper (EMA) to smooth out translational ($X,Y,Z$) and rotational ($Roll, Pitch, Yaw$) data. Added a `smooth_angle()` helper to flawlessly handle -180/180 degree wraps, delivering buttery-smooth UI telemetry.
+
+### 3. Frontend & Survey Enhancements
+- **Dynamic Camera Map (X-Z Plane)**: Updated `map_ui.html`'s canvas loop to dynamically render the camera's real-time position and orientation (Yaw) as an amber directional arrow. Decreased polling interval to 100ms for a 10FPS fluid map experience.
+- **Site Survey Profiler**: Embedded a live video thumbnail within the `SURVEY PROFILING` HUD card. 
+- **ORB/FAST Visualization**: Modified the backend to draw FAST keypoints in cyan and ORB keypoints in green over the video stream, visually differentiating basic corner features from high-quality trackable features.
+
+## Next Steps
+- Verify the true accuracy of the PnP mapping in the physical environment.
+- Consider implementing VIO (Visual-Inertial Odometry) sensor fusion using the S24's Android IMU data for markerless tracking.
 
 ---
-#Session #ADR #Knowledge #Phase1 #Camera #UI
-[[README]] [[STATUS]]
+**Tags**: #Session #ADR #Phase1 #Knowledge #PnP #Telemetry
+**Links**: [[README]] [[STATUS]] [[ADR_001_PnP_Architecture]]
