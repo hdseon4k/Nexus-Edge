@@ -3,6 +3,10 @@
 *.onnx
 configs/*.yaml
 !configs/settings.yaml.sample
+logs/
+__pycache__/
+*.pyc
+*.pyo
 
 # AI Agent & Editor Traces
 .cursorrules

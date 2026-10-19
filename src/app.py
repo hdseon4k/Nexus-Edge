@@ -97,19 +97,28 @@ app = Flask(__name__, static_folder="static", template_folder="static")
 calib_mgr = AutoCalibrationManager(target_frames=20)
 
 MARKER_MAP_PATH = "config/marker_map.json"
+_cached_marker_map = None
 
-# Helper Functions to Read/Write marker_map.json
-def load_marker_map():
+# Helper Functions to Read/Write marker_map.json (in-memory cached to eliminate per-frame disk I/O)
+def load_marker_map(force_reload=False):
+    global _cached_marker_map
+    if _cached_marker_map is not None and not force_reload:
+        return _cached_marker_map
     if not os.path.exists(MARKER_MAP_PATH):
-        return {"description": "AprilTag Absolute World 3D Coordinates", "markers": {}}
+        _cached_marker_map = {"description": "AprilTag Absolute World 3D Coordinates", "markers": {}}
+        return _cached_marker_map
     try:
         with open(MARKER_MAP_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            _cached_marker_map = json.load(f)
+            return _cached_marker_map
     except Exception as e:
         print(f"Error loading marker map: {e}")
-        return {"description": "AprilTag Absolute World 3D Coordinates", "markers": {}}
+        _cached_marker_map = {"description": "AprilTag Absolute World 3D Coordinates", "markers": {}}
+        return _cached_marker_map
 
 def save_marker_map(data):
+    global _cached_marker_map
+    _cached_marker_map = data
     os.makedirs(os.path.dirname(MARKER_MAP_PATH), exist_ok=True)
     with open(MARKER_MAP_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
@@ -149,9 +158,12 @@ telemetry_lock = threading.Lock()
 CAMERA_CALIB_PATH = "config/camera_calibration.json"
 camera_K = np.array([[1150.0, 0.0, 960.0], [0.0, 1150.0, 540.0], [0.0, 0.0, 1.0]], dtype=np.float32)
 camera_dist = np.zeros((5, 1), dtype=np.float32)
+camera_K_scaled = camera_K.copy()
+camera_K_scaled[0, :] *= (640.0 / 1920.0)
+camera_K_scaled[1, :] *= (360.0 / 1080.0)
 
 def load_camera_calibration():
-    global camera_K, camera_dist
+    global camera_K, camera_dist, camera_K_scaled
     if os.path.exists(CAMERA_CALIB_PATH):
         try:
             with open(CAMERA_CALIB_PATH, 'r', encoding='utf-8') as f:
@@ -160,6 +172,9 @@ def load_camera_calibration():
                 camera_dist = np.array(data.get("dist_coeffs", camera_dist), dtype=np.float32)
         except Exception:
             pass
+    camera_K_scaled = camera_K.copy()
+    camera_K_scaled[0, :] *= (640.0 / 1920.0)
+    camera_K_scaled[1, :] *= (360.0 / 1080.0)
 load_camera_calibration()
 
 import math
@@ -205,9 +220,19 @@ def bg_site_survey_worker():
     orb = cv2.ORB_create(nfeatures=2000)
     fast = cv2.FastFeatureDetector_create(threshold=25)
     
+    # Pre-instantiate AprilTag detector and dictionary outside the loop to eliminate per-frame alloc overhead
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
+    aruco_params = cv2.aruco.DetectorParameters()
+    if hasattr(cv2.aruco, 'ArucoDetector'):
+        aruco_detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
+    else:
+        aruco_detector = None
+
     total_orb = 0
     total_fast = 0
-    frames = 0
+    survey_frames = 0
+    frame_seq = 0
+    cached_tag_boxes = []
 
     # --- Zero-Latency Frame Grabber Thread ---
     # Decouples network reading from slow processing (calib/ORB) so the stream never lags
@@ -300,159 +325,165 @@ def bg_site_survey_worker():
         # 1920x1080 -> 640x360 (Reduces pixel count to 1/9 for ultra-fast ORB rendering)
         frame = cv2.resize(frame, (640, 360))
             
+        frame_seq += 1
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        kp_orb = orb.detect(gray, None)
-        kp_fast = fast.detect(gray, None)
-        num_orb = len(kp_orb)
-        num_fast = len(kp_fast)
-        frames += 1
 
-        # Draw ORB and FAST keypoints for visual feedback if survey is active
+        # --- ORB / FAST Feature Profiling (Only computed when survey is ACTIVE to save mobile CPU) ---
         if survey_state["active"]:
+            kp_orb = orb.detect(gray, None)
+            kp_fast = fast.detect(gray, None)
+            num_orb = len(kp_orb)
+            num_fast = len(kp_fast)
+            survey_frames += 1
+
             cv2.drawKeypoints(frame, kp_fast, frame, color=(255, 255, 0), flags=0)
             cv2.drawKeypoints(frame, kp_orb, frame, color=(0, 255, 0), flags=0)
+
+            total_orb += num_orb
+            total_fast += num_fast
+            avg_orb = round(total_orb / max(1, survey_frames), 1)
+            avg_fast = round(total_fast / max(1, survey_frames), 1)
+
+            if avg_orb > 800:
+                status = "EXCELLENT"
+                recom = "Safe for VisualSLAM (High Feature Density)"
+            elif avg_orb > 400:
+                status = "MODERATE"
+                recom = "3M 766 Safety Tape Recommended on Rack Pillars"
+            else:
+                status = "POOR"
+                recom = "High Drift Risk! 3M Safety Tape Required on Walls/Racks"
+
+            with survey_lock:
+                survey_state["frame_count"] = survey_frames
+                survey_state["orb_count"] = num_orb
+                survey_state["fast_count"] = num_fast
+                survey_state["avg_orb"] = avg_orb
+                survey_state["avg_fast"] = avg_fast
+                survey_state["quality_status"] = status
+                survey_state["recommendation"] = recom
             
         # --- [VIEW.MARKER] AprilTag Overlay Logic (Mutually exclusive with CALIB) ---
         if (view_marker_active or survey_state["active"]) and not calib_mgr.active:
             try:
-                aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
-                aruco_params = cv2.aruco.DetectorParameters()
-                
-                if hasattr(cv2.aruco, 'ArucoDetector'):
-                    detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
-                    corners, ids, rejected = detector.detectMarkers(gray)
-                else:
-                    corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
-                    
-                if ids is not None:
-                    marker_map = load_marker_map().get("markers", {})
-                    
-                    new_detections = []
-                    obj_points = []
-                    img_points = []
-                    last_valid_tag = latest_telemetry["last_tag"]
-                    
-                    for i in range(len(ids)):
-                        marker_id = str(ids[i][0])
-                        c = corners[i][0]
-                        # Top-left corner for overlay positioning (percentage based on 640x360)
-                        cx_pct = float(c[0][0]) / 640.0
-                        cy_pct = float(c[0][1]) / 360.0
-                        
-                        det_info = {
-                            "id": marker_id,
-                            "x_pct": cx_pct,
-                            "y_pct": cy_pct,
-                            "registered": False
-                        }
-                        
-                        if marker_id in marker_map:
-                            cv2.polylines(frame, [c.astype(np.int32)], True, (0, 255, 0), 2)
-                            m = marker_map[marker_id]
-                            det_info.update({
-                                "registered": True,
-                                "name": m.get('location_name', ''),
-                                "x": m.get('x', 0),
-                                "y": m.get('y', 0),
-                                "z": m.get('z', 0),
-                                "roll": m.get('roll', 0),
-                                "pitch": m.get('pitch', 0),
-                                "yaw": m.get('yaw', 0)
-                            })
-                            last_valid_tag = f"Tag #{marker_id} ({det_info['name']})"
-                            
-                            world_pts = get_tag_3d_corners(m['x'], m['y'], m['z'], m.get('roll',0), m.get('pitch',0), m.get('yaw',0), m.get('size_meters',0.135))
-                            obj_points.extend(world_pts)
-                            img_points.extend(c)
-                        else:
-                            cv2.polylines(frame, [c.astype(np.int32)], True, (0, 0, 255), 2)
-                        new_detections.append(det_info)
-                        
-                    # Calculate PnP if we have valid points
-                    if len(obj_points) >= 4:
-                        obj_points = np.array(obj_points, dtype=np.float32)
-                        img_points = np.array(img_points, dtype=np.float32)
-                        
-                        # Scale K for 640x360 frame
-                        K_scaled = camera_K.copy()
-                        K_scaled[0, :] *= (640.0 / 1920.0)
-                        K_scaled[1, :] *= (360.0 / 1080.0)
-                        
-                        if len(obj_points) == 4:
-                            ret, rvec, tvec = cv2.solvePnP(obj_points, img_points, K_scaled, camera_dist, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                        else:
-                            ret, rvec, tvec = cv2.solvePnP(obj_points, img_points, K_scaled, camera_dist, flags=cv2.SOLVEPNP_ITERATIVE)
-                            
-                        if ret:
-                            R_cw, _ = cv2.Rodrigues(rvec)
-                            R_wc = R_cw.T
-                            t_wc = -R_wc @ tvec
-                            euler = rotationMatrixToEulerAngles(R_wc)
-                            
-                            # EMA Smoothing
-                            alpha_pos = 0.5
-                            alpha_ang = 0.25
-                            if prev_t_wc is None:
-                                prev_t_wc = t_wc
-                                prev_euler = euler
-                            else:
-                                prev_t_wc = prev_t_wc + alpha_pos * (t_wc - prev_t_wc)
-                                prev_euler = [smooth_angle(prev_euler[i], euler[i], alpha_ang) for i in range(3)]
-                            
-                            with telemetry_lock:
-                                latest_telemetry["x"] = round(float(prev_t_wc[0, 0] if prev_t_wc.ndim > 1 else prev_t_wc[0]), 2)
-                                latest_telemetry["y"] = round(float(prev_t_wc[1, 0] if prev_t_wc.ndim > 1 else prev_t_wc[1]), 2)
-                                latest_telemetry["z"] = round(float(prev_t_wc[2, 0] if prev_t_wc.ndim > 1 else prev_t_wc[2]), 2)
-                                latest_telemetry["roll"] = round(float(prev_euler[0]), 1)
-                                latest_telemetry["pitch"] = round(float(prev_euler[1]), 1)
-                                latest_telemetry["yaw"] = round(float(prev_euler[2]), 1)
-                                latest_telemetry["last_tag"] = last_valid_tag
+                # Frame decimation: Detect markers every 2 frames (~15fps) to save mobile CPU/battery
+                should_detect = ((frame_seq % 2) == 0)
 
+                if should_detect:
+                    if aruco_detector is not None:
+                        corners, ids, rejected = aruco_detector.detectMarkers(gray)
+                    else:
+                        corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
                         
-                    with marker_lock:
-                        current_marker_detections.clear()
-                        current_marker_detections.extend(new_detections)
+                    cached_tag_boxes.clear()
+                    if ids is not None:
+                        marker_map = load_marker_map().get("markers", {})
                         
-                    if len(obj_points) < 4:
+                        new_detections = []
+                        obj_points = []
+                        img_points = []
+                        last_valid_tag = latest_telemetry["last_tag"]
+                        
+                        for i in range(len(ids)):
+                            marker_id = str(ids[i][0])
+                            c = corners[i][0]
+                            # Top-left corner for overlay positioning (percentage based on 640x360)
+                            cx_pct = float(c[0][0]) / 640.0
+                            cy_pct = float(c[0][1]) / 360.0
+                            
+                            det_info = {
+                                "id": marker_id,
+                                "x_pct": cx_pct,
+                                "y_pct": cy_pct,
+                                "registered": False
+                            }
+                            
+                            c_int = c.astype(np.int32)
+                            if marker_id in marker_map:
+                                box_color = (0, 255, 0)
+                                m = marker_map[marker_id]
+                                det_info.update({
+                                    "registered": True,
+                                    "name": m.get('location_name', ''),
+                                    "x": m.get('x', 0),
+                                    "y": m.get('y', 0),
+                                    "z": m.get('z', 0),
+                                    "roll": m.get('roll', 0),
+                                    "pitch": m.get('pitch', 0),
+                                    "yaw": m.get('yaw', 0)
+                                })
+                                last_valid_tag = f"Tag #{marker_id} ({det_info['name']})"
+                                
+                                world_pts = get_tag_3d_corners(m['x'], m['y'], m['z'], m.get('roll',0), m.get('pitch',0), m.get('yaw',0), m.get('size_meters',0.135))
+                                obj_points.extend(world_pts)
+                                img_points.extend(c)
+                            else:
+                                box_color = (0, 0, 255)
+                                
+                            cached_tag_boxes.append((c_int, box_color))
+                            new_detections.append(det_info)
+                            
+                        # Calculate PnP if we have valid points
+                        if len(obj_points) >= 4:
+                            obj_points = np.array(obj_points, dtype=np.float32)
+                            img_points = np.array(img_points, dtype=np.float32)
+                            
+                            if len(obj_points) == 4:
+                                ret, rvec, tvec = cv2.solvePnP(obj_points, img_points, camera_K_scaled, camera_dist, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                            else:
+                                ret, rvec, tvec = cv2.solvePnP(obj_points, img_points, camera_K_scaled, camera_dist, flags=cv2.SOLVEPNP_ITERATIVE)
+                                
+                            if ret:
+                                R_cw, _ = cv2.Rodrigues(rvec)
+                                R_wc = R_cw.T
+                                t_wc = -R_wc @ tvec
+                                euler = rotationMatrixToEulerAngles(R_wc)
+                                
+                                # EMA Smoothing
+                                alpha_pos = 0.5
+                                alpha_ang = 0.25
+                                if prev_t_wc is None:
+                                    prev_t_wc = t_wc
+                                    prev_euler = euler
+                                else:
+                                    prev_t_wc = prev_t_wc + alpha_pos * (t_wc - prev_t_wc)
+                                    prev_euler = [smooth_angle(prev_euler[i], euler[i], alpha_ang) for i in range(3)]
+                                
+                                with telemetry_lock:
+                                    latest_telemetry["x"] = round(float(prev_t_wc[0, 0] if prev_t_wc.ndim > 1 else prev_t_wc[0]), 2)
+                                    latest_telemetry["y"] = round(float(prev_t_wc[1, 0] if prev_t_wc.ndim > 1 else prev_t_wc[1]), 2)
+                                    latest_telemetry["z"] = round(float(prev_t_wc[2, 0] if prev_t_wc.ndim > 1 else prev_t_wc[2]), 2)
+                                    latest_telemetry["roll"] = round(float(prev_euler[0]), 1)
+                                    latest_telemetry["pitch"] = round(float(prev_euler[1]), 1)
+                                    latest_telemetry["yaw"] = round(float(prev_euler[2]), 1)
+                                    latest_telemetry["last_tag"] = last_valid_tag
+
+                        with marker_lock:
+                            current_marker_detections.clear()
+                            current_marker_detections.extend(new_detections)
+                            
+                        if len(obj_points) < 4:
+                            prev_t_wc = None
+                            prev_euler = None
+                    else:
+                        with marker_lock:
+                            current_marker_detections.clear()
                         prev_t_wc = None
                         prev_euler = None
-                else:
-                    with marker_lock:
-                        current_marker_detections.clear()
-                    prev_t_wc = None
-                    prev_euler = None
+                
+                # Render detected/cached marker boundaries (smooth 30fps display without re-detecting)
+                for c_box, col in cached_tag_boxes:
+                    cv2.polylines(frame, [c_box], True, col, 2)
+
             except Exception as e:
                 import traceback
                 print(f"[ERROR in bg_site_survey_worker]: {e}")
                 traceback.print_exc()
-
+        else:
+            cached_tag_boxes.clear()
 
         with stream_lock:
             latest_stream_frame = frame.copy()
-
-        total_orb += num_orb
-        total_fast += num_fast
-        avg_orb = round(total_orb / max(1, frames), 1)
-        avg_fast = round(total_fast / max(1, frames), 1)
-
-        if avg_orb > 800:
-            status = "EXCELLENT"
-            recom = "Safe for VisualSLAM (High Feature Density)"
-        elif avg_orb > 400:
-            status = "MODERATE"
-            recom = "3M 766 Safety Tape Recommended on Rack Pillars"
-        else:
-            status = "POOR"
-            recom = "High Drift Risk! 3M Safety Tape Required on Walls/Racks"
-
-        with survey_lock:
-            survey_state["frame_count"] = frames
-            survey_state["orb_count"] = num_orb
-            survey_state["fast_count"] = num_fast
-            survey_state["avg_orb"] = avg_orb
-            survey_state["avg_fast"] = avg_fast
-            survey_state["quality_status"] = status
-            survey_state["recommendation"] = recom
 
         time.sleep(0.03)
 
@@ -484,7 +515,7 @@ def generate_mjpeg():
                     frame = latest_stream_frame
                     
             # Frame is already 640x360 from the worker thread, so no need to resize again.
-            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
             frame_bytes = buffer.tobytes()
             
             yield (b'--frame\r\n'
@@ -713,5 +744,9 @@ if __name__ == '__main__':
     print(f"   ✅ 태블릿 핫스팟 접속 시 : 태블릿의 Wi-Fi 설정 창에서")
     print(f"      '게이트웨이' 또는 '라우터' 주소를 확인해 접속하세요!")
     print(f"=================================================================")
-    
-    app.run(host='0.0.0.0', port=port, debug=False)
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except OSError as e:
+        print(f"\n❌ [ERROR] 포트 {port} 바인딩 실패! ({e})")
+        print(f"👉 기존 파이썬 프로세스가 실행 중일 수 있습니다: 'pkill -9 -f python' 실행 권장")
+        print(f"👉 또는 다른 포트로 실행: 'PORT=5001 python src/app.py'\n")
