@@ -19,3 +19,10 @@ _agent/
 .aichat/
 docs/*_ki.md
 GEMINI.md
+
+# Environment & Dependencies
+venv/
+.env
+node_modules/
+*.log
+
