@@ -122,6 +122,9 @@ PowerShell 터미널을 열고 아래 명령어로 정상 구성을 확인합니
    adb devices
    ```
    - 정상 출력 예시: `<기기시리얼번호>    device` (`unauthorized`가 아님을 확인)
+   > [!TIP]
+   > **`unauthorized` 상태이거나 "USB 디버깅을 허용하시겠습니까?" 팝업이 나타나지 않는 경우**:  
+   > S24 Ultra의 `설정` → `보안 및 개인정보 보호` → **`보안 위험 자동 차단`**을 설정(켬) 후 다시 **해제(사용 안 함)**하면 디버깅 허용 팝업이 즉시 나타납니다.
 
 2. **D 드라이브 SDK & NDK 경로 확인**:
    ```powershell
@@ -134,13 +137,14 @@ PowerShell 터미널을 열고 아래 명령어로 정상 구성을 확인합니
 ---
 
 ## 5. 완료 후 다음 단계 (Phase 1 착수)
-환경 구축이 완료되면 AI 에이전트와 함께 다음 작업을 즉시 진행할 수 있습니다:
-1. `D:\GitHub\Nexus-Edge\android` (또는 네이티브 프로젝트 폴더) 내 C++20 / CMake 기반 NDK 신규 프로젝트 뼈대 생성.
+환경 구축이 완료되면 [[Phase1_Native_App_Execution_Plan]]에 따라 다음 작업을 순차적으로 진행합니다:
+1. `D:\CTO\Nexus-Edge\android\` 내 C++20 / CMake 기반 NDK 신규 프로젝트 뼈대 생성.
 2. OpenCV 4.14.0 `arm64-v8a` 및 Camera2 Zero-Copy JNI 브리지 코드 작성.
 
 ---
 ## Connections
 - **Related Documents**:
+  - [[Phase1_Native_App_Execution_Plan]]
   - [[android_native_app_transition_plan]]
   - [[ADR_006_android_native_app_transition]]
   - [[STATUS]]
