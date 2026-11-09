@@ -26,3 +26,11 @@ venv/
 node_modules/
 *.log
 
+
+# Hygiene & Build Artifacts
+*Zone.Identifier*
+*:Zone.Identifier
+.pio/
+tools/platform-tools/
+tools/platform-tools.zip
+.godot/
